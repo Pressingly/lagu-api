@@ -15,18 +15,6 @@ module BillableMetrics
       def compute_aggregation
         1
       end
-
-      private
-
-      def latest_timebased_event
-        @latest_timebased_event ||= TimebasedEvent
-          .where(organization: customer.organization)
-          .where(external_subscription_id: subscription.external_id)
-          .where(event_type: TimebasedEvent.event_types[:usage_time_started])
-          .where('timestamp <= ?', event.timestamp)
-          .order(timestamp: :desc)
-          .first
-      end
     end
   end
 end

@@ -32,13 +32,6 @@ module Events
         handle_quantified_event
       end
 
-      # if should_handle_timebased_event?
-      #   return result unless timebased_event_service.process_event?
-
-      #   handle_timebased_event
-      #   handle_pay_in_advance_timebased
-      # end
-
       handle_pay_in_advance
 
       result.event = event
@@ -153,37 +146,6 @@ module Events
       return unless organization.webhook_endpoints.any?
 
       SendWebhookJob.perform_later('event.error', event, { error: })
-    end
-
-    # Timebased event for usage based charges
-    def timebased_event_service
-      @timebased_event_service ||= TimebasedEvents::CreateOrUpdateService.new(event)
-    end
-
-    def should_handle_timebased_event?
-      timebased_event_service.matching_billable_metric?
-    end
-
-    def handle_timebased_event
-      service_result = timebased_event_service.call
-      service_result.raise_if_error!
-    end
-
-    def timebased_charges
-      return Charge.none unless subscriptions.first
-
-      subscriptions
-        .first
-        .plan
-        .charges
-        .pay_in_advance
-        .joins(:billable_metric)
-        .where(billable_metric: { code: event.code })
-        .where(charge_model: 'timebased')
-    end
-
-    def handle_pay_in_advance_timebased
-      raise NotImplementedError
     end
 
     # Timebased event for subscription renewal
