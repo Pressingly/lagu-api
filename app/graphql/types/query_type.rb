@@ -27,6 +27,7 @@ module Types
     field :customer_usage, resolver: Resolvers::Customers::UsageResolver
     field :customers, resolver: Resolvers::CustomersResolver
     field :events, resolver: Resolvers::EventsResolver
+    field :google_auth_url, resolver: Resolvers::Auth::Google::AuthUrlResolver
     field :gross_revenues, resolver: Resolvers::Analytics::GrossRevenuesResolver
     field :invite, resolver: Resolvers::InviteResolver
     field :invites, resolver: Resolvers::InvitesResolver
@@ -39,6 +40,8 @@ module Types
     field :mrrs, resolver: Resolvers::Analytics::MrrsResolver
     field :organization, resolver: Resolvers::OrganizationResolver
     field :password_reset, resolver: Resolvers::PasswordResetResolver
+    field :payment_provider, resolver: Resolvers::PaymentProviderResolver
+    field :payment_providers, resolver: Resolvers::PaymentProvidersResolver
     field :plan, resolver: Resolvers::PlanResolver
     field :plans, resolver: Resolvers::PlansResolver
     field :subscription, resolver: Resolvers::SubscriptionResolver

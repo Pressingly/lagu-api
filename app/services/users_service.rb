@@ -18,7 +18,7 @@ class UsersService < BaseService
 
   def register(email, password, organization_name)
     if ENV.fetch('LAGO_SIGNUP_DISABLED', 'false') == 'true'
-      return result.not_allowed_failure!(code: 'signup is disabled')
+      return result.not_allowed_failure!(code: 'signup disabled')
     end
 
     result.user = User.find_or_initialize_by(email:)
@@ -30,7 +30,7 @@ class UsersService < BaseService
     end
 
     ActiveRecord::Base.transaction do
-      result.organization = Organization.create!(name: organization_name)
+      result.organization = Organization.create!(name: organization_name, document_numbering: 'per_organization')
 
       create_user_and_membership(result, password)
     end

@@ -18,11 +18,19 @@ module Types
       field :properties, Types::Charges::Properties, null: true
       field :prorated, Boolean, null: false
 
+      field :filters, [Types::ChargeFilters::Object], null: true
+
       field :created_at, GraphQL::Types::ISO8601DateTime, null: false
       field :deleted_at, GraphQL::Types::ISO8601DateTime, null: true
       field :updated_at, GraphQL::Types::ISO8601DateTime, null: false
 
       field :taxes, [Types::Taxes::Object]
+
+      def properties
+        return object.properties unless object.properties == '{}'
+
+        JSON.parse(object.properties)
+      end
 
       def billable_metric
         return object.billable_metric unless object.discarded?

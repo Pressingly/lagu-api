@@ -9,7 +9,9 @@ module Types
       field :charge, Types::Charges::Object, null: true
       field :currency, Types::CurrencyEnum, null: false
       field :description, String, null: true
+      field :filter_display_name, String, null: true
       field :group_name, String, null: true
+      field :grouped_by, GraphQL::Types::JSON, null: false
       field :invoice_display_name, String, null: true
       field :invoice_name, String, null: true
       field :subscription, Types::Subscriptions::Object, null: true
@@ -26,8 +28,10 @@ module Types
 
       field :applied_taxes, [Types::Fees::AppliedTaxes::Object]
 
-      delegate :group_name, to: :object
-      delegate :invoice_name, to: :object
+      field :amount_details, Types::Fees::AmountDetails::Object, null: true
+
+      field :adjusted_fee, Boolean, null: false
+      field :adjusted_fee_type, Types::AdjustedFees::AdjustedFeeTypeEnum, null: true
 
       def item_type
         object.fee_type
@@ -35,6 +39,21 @@ module Types
 
       def applied_taxes
         object.applied_taxes.order(tax_rate: :desc)
+      end
+
+      def adjusted_fee
+        object.adjusted_fee.present?
+      end
+
+      def adjusted_fee_type
+        return nil if object.adjusted_fee.blank?
+        return nil if object.adjusted_fee.adjusted_display_name?
+
+        object.adjusted_fee.adjusted_units? ? 'adjusted_units' : 'adjusted_amount'
+      end
+
+      def filter_display_name
+        object.charge_filter&.display_name
       end
     end
   end

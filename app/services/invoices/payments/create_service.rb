@@ -20,6 +20,8 @@ module Invoices
         when :pinet
           Invoices::Payments::PinetCreateJob.perform_later(invoice)
         end
+      rescue ActiveJob::Uniqueness::JobNotUnique => e
+        Sentry.capture_exception(e)
       end
 
       private

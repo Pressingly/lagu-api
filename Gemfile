@@ -3,25 +3,26 @@
 source 'https://rubygems.org'
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
-ruby '3.2.2'
+ruby '3.2.3'
 
 # Core
 gem 'aasm'
 gem 'activejob-uniqueness', require: 'active_job/uniqueness/sidekiq_patch'
 gem 'bootsnap', require: false
 gem 'clockwork', require: false
-gem 'puma', '~> 5.6'
+gem 'puma', '~> 6.4'
 gem 'rails', '~> 7.0.8'
 gem 'sidekiq'
 
 # Security
 gem 'bcrypt'
-gem 'googleauth', require: false
+gem 'googleauth', '~> 1.11.0'
 gem 'jwt'
 gem 'oauth2'
 gem 'rack-cors'
 
 # Database
+gem 'after_commit_everywhere'
 gem 'clickhouse-activerecord', git: 'https://github.com/getlago/clickhouse-activerecord.git'
 gem 'discard', '~> 1.2'
 gem 'kaminari-activerecord'
@@ -51,7 +52,6 @@ gem 'analytics-ruby', '~> 2.4.0', require: 'segment/analytics'
 
 # Logging
 gem 'lograge'
-gem 'lograge-sql'
 gem 'logstash-event'
 
 # Multipart support
@@ -104,6 +104,15 @@ group :development do
   gem 'bullet'
   gem 'coffee-rails'
   gem 'graphiql-rails', git: 'https://github.com/rmosolgo/graphiql-rails.git'
+
+  gem 'rubocop-graphql', require: false
+  gem 'rubocop-performance', require: false
+  gem 'rubocop-rails', require: false
+  gem 'rubocop-rspec', require: false
+  gem 'rubocop-thread_safety', require: false
+
   gem 'sass-rails'
   gem 'uglifier'
+
+  gem 'ruby-lsp-rails', require: false
 end

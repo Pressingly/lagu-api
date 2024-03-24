@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
+ActiveRecord::Schema[7.0].define(version: 2024_03_14_163426) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -88,6 +88,9 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.uuid "group_id"
+    t.jsonb "grouped_by", default: {}, null: false
+    t.uuid "charge_filter_id"
+    t.index ["charge_filter_id"], name: "index_adjusted_fees_on_charge_filter_id"
     t.index ["charge_id"], name: "index_adjusted_fees_on_charge_id"
     t.index ["fee_id"], name: "index_adjusted_fees_on_fee_id"
     t.index ["group_id"], name: "index_adjusted_fees_on_group_id"
@@ -124,6 +127,17 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.index ["customer_id"], name: "index_applied_coupons_on_customer_id"
   end
 
+  create_table "billable_metric_filters", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "billable_metric_id", null: false
+    t.string "key", null: false
+    t.string "values", default: [], null: false, array: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.index ["billable_metric_id"], name: "index_billable_metric_filters_on_billable_metric_id"
+    t.index ["deleted_at"], name: "index_billable_metric_filters_on_deleted_at"
+  end
+
   create_table "billable_metrics", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "organization_id", null: false
     t.string "name", null: false
@@ -154,10 +168,13 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.decimal "max_aggregation_with_proration"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.jsonb "grouped_by", default: {}, null: false
+    t.uuid "charge_filter_id"
     t.index ["charge_id"], name: "index_cached_aggregations_on_charge_id"
     t.index ["event_id"], name: "index_cached_aggregations_on_event_id"
     t.index ["external_subscription_id"], name: "index_cached_aggregations_on_external_subscription_id"
     t.index ["group_id"], name: "index_cached_aggregations_on_group_id"
+    t.index ["organization_id", "timestamp", "charge_id", "charge_filter_id"], name: "index_timestamp_filter_lookup"
     t.index ["organization_id", "timestamp", "charge_id", "group_id"], name: "index_timestamp_group_lookup"
     t.index ["organization_id", "timestamp", "charge_id"], name: "index_timestamp_lookup"
     t.index ["organization_id"], name: "index_cached_aggregations_on_organization_id"
@@ -174,6 +191,29 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.jsonb "properties", default: {}, null: false
     t.uuid "plan_id"
     t.index ["plan_id"], name: "index_charge_groups_on_plan_id"
+  end
+  
+  create_table "charge_filter_values", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "charge_filter_id", null: false
+    t.uuid "billable_metric_filter_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.string "values", default: [], null: false, array: true
+    t.index ["billable_metric_filter_id"], name: "index_charge_filter_values_on_billable_metric_filter_id"
+    t.index ["charge_filter_id"], name: "index_charge_filter_values_on_charge_filter_id"
+    t.index ["deleted_at"], name: "index_charge_filter_values_on_deleted_at"
+  end
+
+  create_table "charge_filters", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "charge_id", null: false
+    t.jsonb "properties", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.string "invoice_display_name"
+    t.index ["charge_id"], name: "index_charge_filters_on_charge_id"
+    t.index ["deleted_at"], name: "index_charge_filters_on_deleted_at"
   end
 
   create_table "charges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -205,6 +245,26 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.index ["charge_id", "tax_id"], name: "index_charges_taxes_on_charge_id_and_tax_id", unique: true
     t.index ["charge_id"], name: "index_charges_taxes_on_charge_id"
     t.index ["tax_id"], name: "index_charges_taxes_on_tax_id"
+  end
+
+  create_table "commitments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "plan_id", null: false
+    t.integer "commitment_type", null: false
+    t.bigint "amount_cents", null: false
+    t.string "invoice_display_name"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["commitment_type", "plan_id"], name: "index_commitments_on_commitment_type_and_plan_id", unique: true
+    t.index ["plan_id"], name: "index_commitments_on_plan_id"
+  end
+
+  create_table "commitments_taxes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "commitment_id", null: false
+    t.uuid "tax_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["commitment_id"], name: "index_commitments_taxes_on_commitment_id"
+    t.index ["tax_id"], name: "index_commitments_taxes_on_tax_id"
   end
 
   create_table "coupon_targets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -363,6 +423,7 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.string "tax_identification_number"
     t.integer "net_payment_term"
     t.string "external_salesforce_id"
+    t.string "payment_provider_code"
     t.index ["deleted_at"], name: "index_customers_on_deleted_at"
     t.index ["external_id", "organization_id"], name: "index_customers_on_external_id_and_organization_id", unique: true, where: "(deleted_at IS NULL)"
     t.index ["organization_id"], name: "index_customers_on_organization_id"
@@ -440,8 +501,11 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.string "invoice_display_name"
     t.decimal "precise_unit_amount", precision: 30, scale: 15, default: "0.0", null: false
     t.jsonb "amount_details", default: {}, null: false
+    t.uuid "charge_filter_id"
+    t.jsonb "grouped_by", default: {}, null: false
     t.index ["add_on_id"], name: "index_fees_on_add_on_id"
     t.index ["applied_add_on_id"], name: "index_fees_on_applied_add_on_id"
+    t.index ["charge_filter_id"], name: "index_fees_on_charge_filter_id"
     t.index ["charge_id"], name: "index_fees_on_charge_id"
     t.index ["group_id"], name: "index_fees_on_group_id"
     t.index ["invoice_id"], name: "index_fees_on_invoice_id"
@@ -488,6 +552,7 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "deleted_at"
+    t.index ["billable_metric_id", "parent_group_id"], name: "index_groups_on_billable_metric_id_and_parent_group_id"
     t.index ["billable_metric_id"], name: "index_groups_on_billable_metric_id"
     t.index ["deleted_at"], name: "index_groups_on_deleted_at"
     t.index ["parent_group_id"], name: "index_groups_on_parent_group_id"
@@ -566,7 +631,6 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.datetime "voided_at"
     t.integer "organization_sequential_id", default: 0, null: false
     t.boolean "ready_to_be_refreshed", default: false, null: false
-    t.index "organization_id, organization_sequential_id, ((date_trunc('month'::text, created_at))::date)", name: "unique_organization_sequential_id", unique: true, where: "(organization_sequential_id <> 0)"
     t.index ["customer_id", "sequential_id"], name: "index_invoices_on_customer_id_and_sequential_id", unique: true
     t.index ["customer_id"], name: "index_invoices_on_customer_id"
     t.index ["organization_id"], name: "index_invoices_on_organization_id"
@@ -667,6 +731,9 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.jsonb "settings", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "code", null: false
+    t.string "name", null: false
+    t.index ["code", "organization_id"], name: "index_payment_providers_on_code_and_organization_id", unique: true
     t.index ["organization_id"], name: "index_payment_providers_on_organization_id"
   end
 
@@ -731,7 +798,10 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.datetime "deleted_at"
     t.uuid "group_id"
     t.uuid "organization_id", null: false
+    t.jsonb "grouped_by", default: {}, null: false
+    t.uuid "charge_filter_id"
     t.index ["billable_metric_id"], name: "index_quantified_events_on_billable_metric_id"
+    t.index ["charge_filter_id"], name: "index_quantified_events_on_charge_filter_id"
     t.index ["deleted_at"], name: "index_quantified_events_on_deleted_at"
     t.index ["external_id"], name: "index_quantified_events_on_external_id"
     t.index ["group_id"], name: "index_quantified_events_on_group_id"
@@ -883,6 +953,10 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
     t.string "balance_currency", null: false
     t.bigint "consumed_amount_cents", default: 0, null: false
     t.string "consumed_amount_currency", null: false
+    t.bigint "ongoing_balance_cents", default: 0, null: false
+    t.bigint "ongoing_usage_balance_cents", default: 0, null: false
+    t.decimal "credits_ongoing_balance", precision: 30, scale: 5, default: "0.0", null: false
+    t.decimal "credits_ongoing_usage_balance", precision: 30, scale: 5, default: "0.0", null: false
     t.index ["customer_id"], name: "index_wallets_on_customer_id"
   end
 
@@ -925,14 +999,21 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
   add_foreign_key "adjusted_fees", "subscriptions"
   add_foreign_key "applied_add_ons", "add_ons"
   add_foreign_key "applied_add_ons", "customers"
+  add_foreign_key "billable_metric_filters", "billable_metrics"
   add_foreign_key "billable_metrics", "organizations"
   add_foreign_key "cached_aggregations", "groups"
   add_foreign_key "charge_groups", "plans"
+  add_foreign_key "charge_filter_values", "billable_metric_filters"
+  add_foreign_key "charge_filter_values", "charge_filters"
+  add_foreign_key "charge_filters", "charges"
   add_foreign_key "charges", "billable_metrics"
   add_foreign_key "charges", "charge_groups"
   add_foreign_key "charges", "plans"
   add_foreign_key "charges_taxes", "charges"
   add_foreign_key "charges_taxes", "taxes"
+  add_foreign_key "commitments", "plans"
+  add_foreign_key "commitments_taxes", "commitments"
+  add_foreign_key "commitments_taxes", "taxes"
   add_foreign_key "coupon_targets", "billable_metrics"
   add_foreign_key "coupon_targets", "coupons"
   add_foreign_key "coupon_targets", "plans"
@@ -1006,21 +1087,30 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
 
   create_view "last_hour_events_mv", materialized: true, sql_definition: <<-SQL
       WITH billable_metric_groups AS (
-           SELECT billable_metrics_1.id AS bm_id,
+           SELECT billable_metrics_1.organization_id AS bm_organization_id,
+              billable_metrics_1.id AS bm_id,
               billable_metrics_1.code AS bm_code,
               count(parent_groups.id) AS parent_group_count,
               array_agg(parent_groups.key) AS parent_group_keys,
               count(child_groups.id) AS child_group_count,
               array_agg(child_groups.key) AS child_group_keys
              FROM ((billable_metrics billable_metrics_1
-               LEFT JOIN groups parent_groups ON (((parent_groups.billable_metric_id = billable_metrics_1.id) AND (parent_groups.parent_group_id IS NULL))))
-               LEFT JOIN groups child_groups ON (((child_groups.billable_metric_id = billable_metrics_1.id) AND (child_groups.parent_group_id IS NOT NULL))))
+               LEFT JOIN groups parent_groups ON (((parent_groups.billable_metric_id = billable_metrics_1.id) AND (parent_groups.parent_group_id IS NULL) AND (parent_groups.deleted_at IS NULL))))
+               LEFT JOIN groups child_groups ON (((child_groups.billable_metric_id = billable_metrics_1.id) AND (child_groups.parent_group_id IS NOT NULL) AND (child_groups.deleted_at IS NULL))))
             WHERE (billable_metrics_1.deleted_at IS NULL)
             GROUP BY billable_metrics_1.id, billable_metrics_1.code
+          ), billable_metric_filters AS (
+           SELECT billable_metrics_1.organization_id AS bm_organization_id,
+              billable_metrics_1.id AS bm_id,
+              billable_metrics_1.code AS bm_code,
+              filters.key AS filter_key,
+              filters."values" AS filter_values
+             FROM (billable_metrics billable_metrics_1
+               JOIN public.billable_metric_filters filters ON ((filters.billable_metric_id = billable_metrics_1.id)))
+            WHERE ((billable_metrics_1.deleted_at IS NULL) AND (filters.deleted_at IS NULL))
           )
    SELECT events.organization_id,
       events.transaction_id,
-      events."timestamp",
       events.properties,
       billable_metrics.code AS billable_metric_code,
       (billable_metrics.aggregation_type <> 0) AS field_name_mandatory,
@@ -1030,10 +1120,15 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_11_122947) do
       (COALESCE(billable_metric_groups.parent_group_count, (0)::bigint) > 0) AS parent_group_mandatory,
       (events.properties ?| (billable_metric_groups.parent_group_keys)::text[]) AS has_parent_group_key,
       (COALESCE(billable_metric_groups.child_group_count, (0)::bigint) > 0) AS child_group_mandatory,
-      (events.properties ?| (billable_metric_groups.child_group_keys)::text[]) AS has_child_group_key
-     FROM ((events
+      (events.properties ?| (billable_metric_groups.child_group_keys)::text[]) AS has_child_group_key,
+      (events.properties ? (billable_metric_filters.filter_key)::text) AS has_filter_keys,
+      ((events.properties ->> (billable_metric_filters.filter_key)::text) = ANY ((billable_metric_filters.filter_values)::text[])) AS has_valid_filter_values
+     FROM (((events
        LEFT JOIN billable_metrics ON ((((billable_metrics.code)::text = (events.code)::text) AND (events.organization_id = billable_metrics.organization_id))))
        LEFT JOIN billable_metric_groups ON ((billable_metrics.id = billable_metric_groups.bm_id)))
+       LEFT JOIN billable_metric_filters ON ((billable_metrics.id = billable_metric_filters.bm_id)))
     WHERE ((events.deleted_at IS NULL) AND (events.created_at >= (date_trunc('hour'::text, now()) - 'PT1H'::interval)) AND (events.created_at < date_trunc('hour'::text, now())) AND (billable_metrics.deleted_at IS NULL));
   SQL
+  add_index "last_hour_events_mv", ["organization_id"], name: "index_last_hour_events_mv_on_organization_id"
+
 end

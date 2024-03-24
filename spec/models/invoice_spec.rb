@@ -88,7 +88,7 @@ RSpec.describe Invoice, type: :model do
         aggregate_failures do
           expect(invoice).to be_valid
           expect(invoice.sequential_id).to eq(6)
-          expect(invoice.organization_sequential_id).to eq(1)
+          expect(invoice.organization_sequential_id).to eq(16)
         end
       end
     end
@@ -115,6 +115,40 @@ RSpec.describe Invoice, type: :model do
         organization_id_substring = organization.id.last(4).upcase
 
         expect(invoice.number).to eq("LAG-#{organization_id_substring}-#{Time.now.utc.strftime('%Y%m')}-001")
+      end
+
+      context 'with existing invoices in current month' do
+        let(:created_at) { Time.now.utc }
+
+        before do
+          create(:invoice, customer:, organization:, sequential_id: 4, organization_sequential_id: 14, created_at:)
+          create(:invoice, customer:, organization:, sequential_id: 5, organization_sequential_id: 15, created_at:)
+        end
+
+        it 'scopes the organization_sequential_id to the organization and month' do
+          invoice.save
+
+          organization_id_substring = organization.id.last(4).upcase
+
+          expect(invoice.number).to eq("LAG-#{organization_id_substring}-#{Time.now.utc.strftime('%Y%m')}-016")
+        end
+      end
+
+      context 'with existing invoices in previous month' do
+        let(:created_at) { Time.now.utc - 1.month }
+
+        before do
+          create(:invoice, customer:, organization:, sequential_id: 4, organization_sequential_id: 14, created_at:)
+          create(:invoice, customer:, organization:, sequential_id: 5, organization_sequential_id: 15, created_at:)
+        end
+
+        it 'scopes the organization_sequential_id to the organization and month' do
+          invoice.save
+
+          organization_id_substring = organization.id.last(4).upcase
+
+          expect(invoice.number).to eq("LAG-#{organization_id_substring}-#{Time.now.utc.strftime('%Y%m')}-016")
+        end
       end
     end
   end
@@ -186,6 +220,44 @@ RSpec.describe Invoice, type: :model do
       fee = create(:fee, subscription_id: subscription.id, invoice_id: invoice.id)
 
       expect(invoice.subscription_fees(subscription.id)).to eq([fee])
+    end
+  end
+
+  describe '#existing_fees_in_interval?' do
+    let(:invoice_subscription) { create(:invoice_subscription) }
+    let(:invoice) { invoice_subscription.invoice }
+    let(:subscription) { invoice_subscription.subscription }
+    let(:billable_metric) { create(:sum_billable_metric, organization: subscription.organization) }
+    let(:charge) { create(:standard_charge, plan: subscription.plan, billable_metric:, pay_in_advance: false) }
+    let(:fee) { create(:charge_fee, subscription:, invoice:, charge:, units: 1) }
+
+    before { fee }
+
+    it 'returns true' do
+      expect(invoice.existing_fees_in_interval?(subscription_id: subscription.id)).to eq(true)
+    end
+
+    context 'when charges are in advance' do
+      let(:charge) { create(:standard_charge, plan: subscription.plan, billable_metric:, pay_in_advance: true) }
+
+      it 'returns false' do
+        expect(invoice.existing_fees_in_interval?(subscription_id: subscription.id)).to eq(false)
+      end
+
+      context 'with charge_in_advance set to true' do
+        it 'returns true' do
+          expect(invoice.existing_fees_in_interval?(subscription_id: subscription.id, charge_in_advance: true))
+            .to eq(true)
+        end
+      end
+    end
+
+    context 'when unit number iz zero' do
+      let(:fee) { create(:charge_fee, subscription:, invoice:, charge:, units: 0) }
+
+      it 'returns false' do
+        expect(invoice.existing_fees_in_interval?(subscription_id: subscription.id)).to eq(false)
+      end
     end
   end
 

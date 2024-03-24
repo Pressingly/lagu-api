@@ -25,9 +25,11 @@ input AddAdyenPaymentProviderInput {
   A unique identifier for the client performing the mutation.
   """
   clientMutationId: String
+  code: String!
   hmacKey: String
   livePrefix: String
   merchantAccount: String!
+  name: String!
   successRedirectUrl: String
 }
 
@@ -41,6 +43,8 @@ input AddGocardlessPaymentProviderInput {
   A unique identifier for the client performing the mutation.
   """
   clientMutationId: String
+  code: String!
+  name: String!
   successRedirectUrl: String
 }
 
@@ -93,17 +97,25 @@ input AddStripePaymentProviderInput {
   A unique identifier for the client performing the mutation.
   """
   clientMutationId: String
-  createCustomers: Boolean
+  code: String!
+  name: String!
   secretKey: String
   successRedirectUrl: String
 }
 
+enum AdjustedFeeTypeEnum {
+  adjusted_amount
+  adjusted_units
+}
+
 type AdyenProvider {
-  apiKey: String!
+  apiKey: String
+  code: String!
   hmacKey: String
   id: ID!
   livePrefix: String
   merchantAccount: String!
+  name: String!
   successRedirectUrl: String
 }
 
@@ -152,6 +164,10 @@ interface AppliedTax {
   updatedAt: ISO8601DateTime!
 }
 
+type AuthUrl {
+  url: String!
+}
+
 """
 Represents non-fractional signed whole numeric values. Since the value may
 exceed the size of a 32-bit integer, it's encoded as a string.
@@ -170,6 +186,7 @@ type BillableMetric {
   description: String
   draftInvoicesCount: Int!
   fieldName: String
+  filters: [BillableMetricFilter!]
   flatGroups: [Group!]
   group: JSON
   id: ID!
@@ -187,6 +204,23 @@ type BillableMetricCollection {
   metadata: CollectionMetadata!
 }
 
+"""
+Billable metric filters
+"""
+type BillableMetricFilter {
+  id: ID!
+  key: String!
+  values: [String!]!
+}
+
+"""
+Billable metric filters input arguments
+"""
+input BillableMetricFiltersInput {
+  key: String!
+  values: [String!]!
+}
+
 enum BillingTimeEnum {
   anniversary
   calendar
@@ -198,6 +232,7 @@ type Charge {
   chargeModel: ChargeModelEnum!
   createdAt: ISO8601DateTime!
   deletedAt: ISO8601DateTime
+  filters: [ChargeFilter!]
   groupProperties: [GroupProperties!]
   id: ID!
   invoiceDisplayName: String
@@ -243,10 +278,41 @@ input ChargeGroupPropertiesInput {
   freeUnits: BigInt
 }
 
+"""
+Charge filters object
+"""
+type ChargeFilter {
+  id: ID!
+  invoiceDisplayName: String
+  properties: Properties!
+  values: ChargeFilterValues!
+}
+
+"""
+Charge filters input arguments
+"""
+input ChargeFilterInput {
+  invoiceDisplayName: String
+  properties: PropertiesInput!
+  values: ChargeFilterValues!
+}
+
+type ChargeFilterUsage {
+  amountCents: BigInt!
+  eventsCount: Int!
+  id: ID!
+  invoiceDisplayName: String
+  units: Float!
+  values: ChargeFilterValues!
+}
+
+scalar ChargeFilterValues
+
 input ChargeInput {
   billableMetricId: ID!
   chargeGroupId: ID
   chargeModel: ChargeModelEnum!
+  filters: [ChargeFilterInput!]
   groupProperties: [GroupPropertiesInput!]
   id: ID
   invoiceDisplayName: String
@@ -271,6 +337,7 @@ enum ChargeModelEnum {
 
 input ChargeOverridesInput {
   billableMetricId: ID!
+  filters: [ChargeFilterInput!]
   groupProperties: [GroupPropertiesInput!]
   id: ID!
   invoiceDisplayName: String
@@ -284,6 +351,8 @@ type ChargeUsage {
   billableMetric: BillableMetric!
   charge: Charge!
   eventsCount: Int!
+  filters: [ChargeFilterUsage!]
+  groupedUsage: [GroupedChargeUsage!]!
   groups: [GroupUsage!]
   units: Float!
 }
@@ -293,6 +362,29 @@ type CollectionMetadata {
   limitValue: Int!
   totalCount: Int!
   totalPages: Int!
+}
+
+type Commitment {
+  amountCents: BigInt!
+  commitmentType: CommitmentTypeEnum!
+  createdAt: ISO8601DateTime!
+  id: ID!
+  invoiceDisplayName: String
+  plan: Plan!
+  taxes: [Tax!]
+  updatedAt: ISO8601DateTime!
+}
+
+input CommitmentInput {
+  amountCents: BigInt
+  commitmentType: CommitmentTypeEnum
+  id: ID
+  invoiceDisplayName: String
+  taxCodes: [String!]
+}
+
+enum CommitmentTypeEnum {
+  minimum_commitment
 }
 
 enum CountryCode {
@@ -1628,7 +1720,7 @@ input CreateAdjustedFeeInput {
   feeId: ID!
   invoiceDisplayName: String
   unitAmountCents: BigInt
-  units: Float!
+  units: Float
 }
 
 """
@@ -1662,6 +1754,7 @@ input CreateBillableMetricInput {
   code: String!
   description: String!
   fieldName: String
+  filters: [BillableMetricFiltersInput!]
   group: JSON
   name: String!
   recurring: Boolean
@@ -1734,6 +1827,7 @@ input CreateCustomerInput {
   name: String!
   netPaymentTerm: Int
   paymentProvider: ProviderTypeEnum
+  paymentProviderCode: String
   phone: String
   providerCustomer: ProviderCustomerInput
   state: String
@@ -1839,6 +1933,7 @@ input CreatePlanInput {
   description: String
   interval: PlanInterval!
   invoiceDisplayName: String
+  minimumCommitment: CommitmentInput
   name: String!
   payInAdvance: Boolean!
   taxCodes: [String!]
@@ -2281,6 +2376,11 @@ enum CurrencyEnum {
   JMD
 
   """
+  Jordanian Dinar
+  """
+  JOD
+
+  """
   Japanese Yen
   """
   JPY
@@ -2309,6 +2409,11 @@ enum CurrencyEnum {
   South Korean Won
   """
   KRW
+
+  """
+  Kuwaiti Dinar
+  """
+  KWD
 
   """
   Cayman Islands Dollar
@@ -2731,6 +2836,7 @@ type Customer {
   name: String
   netPaymentTerm: Int
   paymentProvider: ProviderTypeEnum
+  paymentProviderCode: String
   phone: String
   providerCustomer: ProviderCustomer
   sequentialId: String!
@@ -3075,8 +3181,11 @@ type EventCollection {
 }
 
 type Fee implements InvoiceItem {
+  adjustedFee: Boolean!
+  adjustedFeeType: AdjustedFeeTypeEnum
   amountCents: BigInt!
   amountCurrency: CurrencyEnum!
+  amountDetails: FeeAmountDetails
   appliedTaxes: [FeeAppliedTax!]
   charge: Charge
   creditableAmountCents: BigInt!
@@ -3084,8 +3193,10 @@ type Fee implements InvoiceItem {
   description: String
   eventsCount: BigInt
   feeType: FeeTypesEnum!
+  filterDisplayName: String
   group: Group
   groupName: String
+  groupedBy: JSON!
   id: ID!
   invoiceDisplayName: String
   invoiceName: String
@@ -3099,6 +3210,45 @@ type Fee implements InvoiceItem {
   trueUpFee: Fee
   trueUpParentFee: Fee
   units: Float!
+}
+
+type FeeAmountDetails {
+  fixedFeeTotalAmount: String
+  fixedFeeUnitAmount: String
+  flatUnitAmount: String
+  freeEvents: Int
+  freeUnits: String
+  graduatedPercentageRanges: [FeeAmountDetailsGraduatedPercentageRange!]
+  graduatedRanges: [FeeAmountDetailsGraduatedRange!]
+  minMaxAdjustmentTotalAmount: String
+  paidEvents: Int
+  paidUnits: String
+  perPackageSize: Int
+  perPackageUnitAmount: String
+  perUnitAmount: String
+  perUnitTotalAmount: String
+  rate: String
+  units: String
+}
+
+type FeeAmountDetailsGraduatedPercentageRange {
+  flatUnitAmount: String
+  fromValue: Int
+  perUnitTotalAmount: String
+  rate: String
+  toValue: Int
+  totalWithFlatAmount: String
+  units: String
+}
+
+type FeeAmountDetailsGraduatedRange {
+  flatUnitAmount: String
+  fromValue: Int
+  perUnitAmount: String
+  perUnitTotalAmount: String
+  toValue: Int
+  totalWithFlatAmount: String
+  units: String
 }
 
 type FeeAppliedTax implements AppliedTax {
@@ -3131,6 +3281,7 @@ input FeeInput {
 enum FeeTypesEnum {
   add_on
   charge
+  commitment
   credit
   subscription
 }
@@ -3182,10 +3333,47 @@ type GenerateCustomerPortalUrlPayload {
 }
 
 type GocardlessProvider {
+  code: String!
   hasAccessToken: Boolean!
   id: ID!
+  name: String!
   successRedirectUrl: String
   webhookSecret: String
+}
+
+"""
+Autogenerated input type of GoogleAcceptInvite
+"""
+input GoogleAcceptInviteInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  code: String!
+  inviteToken: String!
+}
+
+"""
+Autogenerated input type of GoogleLoginUser
+"""
+input GoogleLoginUserInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  code: String!
+}
+
+"""
+Autogenerated input type of GoogleRegisterUser
+"""
+input GoogleRegisterUserInput {
+  """
+  A unique identifier for the client performing the mutation.
+  """
+  clientMutationId: String
+  code: String!
+  organizationName: String!
 }
 
 type GraduatedPercentageRange {
@@ -3255,6 +3443,15 @@ type GroupUsage {
   key: String
   units: Float!
   value: String!
+}
+
+type GroupedChargeUsage {
+  amountCents: BigInt!
+  eventsCount: Int!
+  filters: [ChargeFilterUsage!]
+  groupedBy: JSON
+  groups: [GroupUsage!]
+  units: Float!
 }
 
 """
@@ -3838,6 +4035,36 @@ type Mutation {
   ): GenerateCustomerPortalUrlPayload
 
   """
+  Accepts a membership invite with Google Oauth
+  """
+  googleAcceptInvite(
+    """
+    Parameters for GoogleAcceptInvite
+    """
+    input: GoogleAcceptInviteInput!
+  ): RegisterUser
+
+  """
+  Opens a session for an existing user with Google Oauth
+  """
+  googleLoginUser(
+    """
+    Parameters for GoogleLoginUser
+    """
+    input: GoogleLoginUserInput!
+  ): LoginUser
+
+  """
+  Register a new user with Google Oauth
+  """
+  googleRegisterUser(
+    """
+    Parameters for GoogleRegisterUser
+    """
+    input: GoogleRegisterUserInput!
+  ): RegisterUser
+
+  """
   Opens a session for an existing user
   """
   loginUser(
@@ -4164,7 +4391,7 @@ Organization Type
 type Organization {
   addressLine1: String
   addressLine2: String
-  adyenPaymentProvider: AdyenProvider
+  adyenPaymentProviders: [AdyenProvider!]
   apiKey: String!
   billingConfiguration: OrganizationBillingConfiguration
   city: String
@@ -4176,7 +4403,7 @@ type Organization {
   email: String
   emailSettings: [EmailSettingsEnum!]
   euTaxManagement: Boolean!
-  gocardlessPaymentProvider: GocardlessProvider
+  gocardlessPaymentProviders: [GocardlessProvider!]
   id: ID!
   legalName: String
   legalNumber: String
@@ -4185,7 +4412,7 @@ type Organization {
   netPaymentTerm: Int!
   pinetPaymentProvider: PinetProvider
   state: String
-  stripePaymentProvider: StripeProvider
+  stripePaymentProviders: [StripeProvider!]
   taxIdentificationNumber: String
 
   """
@@ -4231,6 +4458,13 @@ type PinetProvider {
   successRedirectUrl: String
 }
 
+union PaymentProvider = AdyenProvider | GocardlessProvider | StripeProvider | PinetProvider
+
+type PaymentProviderCollection {
+  collection: [PaymentProvider!]!
+  metadata: CollectionMetadata!
+}
+
 type Plan {
   activeSubscriptionsCount: Int!
   amountCents: BigInt!
@@ -4260,6 +4494,7 @@ type Plan {
   id: ID!
   interval: PlanInterval!
   invoiceDisplayName: String
+  minimumCommitment: Commitment
   name: String!
   organization: Organization
   parent: Plan
@@ -4289,6 +4524,7 @@ input PlanOverridesInput {
   charges: [ChargeOverridesInput!]
   description: String
   invoiceDisplayName: String
+  minimumCommitment: CommitmentInput
   name: String
   taxCodes: [String!]
   trialPeriod: Float
@@ -4303,6 +4539,7 @@ type Properties {
   freeUnitsPerTotalAggregation: String
   graduatedPercentageRanges: [GraduatedPercentageRange!]
   graduatedRanges: [GraduatedRange!]
+  groupedBy: [String!]
   packageSize: BigInt
   perTransactionMaxAmount: String
   perTransactionMinAmount: String
@@ -4319,6 +4556,7 @@ input PropertiesInput {
   freeUnitsPerTotalAggregation: String
   graduatedPercentageRanges: [GraduatedPercentageRangeInput!]
   graduatedRanges: [GraduatedRangeInput!]
+  groupedBy: [String!]
   packageSize: BigInt
   perTransactionMaxAmount: String
   perTransactionMinAmount: String
@@ -4341,8 +4579,10 @@ input ProviderCustomerInput {
 }
 
 enum ProviderPaymentMethodsEnum {
+  bacs_debit
   card
   sepa_debit
+  us_bank_account
 }
 
 enum ProviderTypeEnum {
@@ -4523,6 +4763,11 @@ type Query {
   events(limit: Int, page: Int): EventCollection
 
   """
+  Get Google auth url.
+  """
+  googleAuthUrl: AuthUrl!
+
+  """
   Query gross revenue of an organization
   """
   grossRevenues(currency: CurrencyEnum, externalCustomerId: String): GrossRevenueCollection!
@@ -4613,6 +4858,26 @@ type Query {
     """
     token: String!
   ): ResetPassword!
+
+  """
+  Query a single payment provider
+  """
+  paymentProvider(
+    """
+    Code of the payment provider
+    """
+    code: String
+
+    """
+    Uniq ID of the payment provider
+    """
+    id: ID
+  ): PaymentProvider
+
+  """
+  Query organization's payment providers
+  """
+  paymentProviders(limit: Int, page: Int, type: ProviderTypeEnum): PaymentProviderCollection
 
   """
   Query a single plan of an organization
@@ -4884,6 +5149,16 @@ input RevokeMembershipInput {
   id: ID!
 }
 
+"""
+Safe Organization Type
+"""
+type SafeOrganization {
+  id: ID!
+  logoUrl: String
+  name: String!
+  timezone: TimezoneEnum
+}
+
 enum StatusTypeEnum {
   active
   canceled
@@ -4892,9 +5167,10 @@ enum StatusTypeEnum {
 }
 
 type StripeProvider {
-  createCustomers: Boolean!
+  code: String!
   id: ID!
-  secretKey: String!
+  name: String!
+  secretKey: String
   successRedirectUrl: String
 }
 
@@ -5735,13 +6011,16 @@ input UpdateAddOnInput {
 }
 
 """
-Autogenerated input type of UpdateAdyenPaymentProvider
+Update input arguments
 """
 input UpdateAdyenPaymentProviderInput {
   """
   A unique identifier for the client performing the mutation.
   """
   clientMutationId: String
+  code: String
+  id: ID!
+  name: String
   successRedirectUrl: String
 }
 
@@ -5758,6 +6037,7 @@ input UpdateBillableMetricInput {
   code: String!
   description: String!
   fieldName: String
+  filters: [BillableMetricFiltersInput!]
   group: JSON
   id: String!
   name: String!
@@ -5829,6 +6109,7 @@ input UpdateCustomerInput {
   name: String!
   netPaymentTerm: Int
   paymentProvider: ProviderTypeEnum
+  paymentProviderCode: String
   phone: String
   providerCustomer: ProviderCustomerInput
   state: String
@@ -5866,13 +6147,16 @@ input UpdateCustomerWalletInput {
 }
 
 """
-Autogenerated input type of UpdateGocardlessPaymentProvider
+Update input arguments
 """
 input UpdateGocardlessPaymentProviderInput {
   """
   A unique identifier for the client performing the mutation.
   """
   clientMutationId: String
+  code: String
+  id: ID!
+  name: String
   successRedirectUrl: String
 }
 
@@ -5950,6 +6234,7 @@ input UpdatePlanInput {
   id: String!
   interval: PlanInterval!
   invoiceDisplayName: String
+  minimumCommitment: CommitmentInput
   name: String!
   payInAdvance: Boolean!
   taxCodes: [String!]
@@ -5966,13 +6251,16 @@ input UpdateRecurringTransactionRuleInput {
 }
 
 """
-Autogenerated input type of UpdateStripePaymentProvider
+Update input arguments
 """
 input UpdateStripePaymentProviderInput {
   """
   A unique identifier for the client performing the mutation.
   """
   clientMutationId: String
+  code: String
+  id: ID!
+  name: String
   successRedirectUrl: String
 }
 
@@ -6006,7 +6294,7 @@ type User {
   createdAt: ISO8601DateTime!
   email: String
   id: ID!
-  organizations: [Organization!]
+  organizations: [SafeOrganization!]
   premium: Boolean!
   updatedAt: ISO8601DateTime!
 }
@@ -6056,6 +6344,8 @@ type Wallet {
   consumedCredits: Float!
   createdAt: ISO8601DateTime!
   creditsBalance: Float!
+  creditsOngoingBalance: Float!
+  creditsOngoingUsageBalance: Float!
   currency: CurrencyEnum!
   customer: Customer
   expirationAt: ISO8601DateTime
@@ -6063,6 +6353,8 @@ type Wallet {
   lastBalanceSyncAt: ISO8601DateTime
   lastConsumedCreditAt: ISO8601DateTime
   name: String
+  ongoingBalanceCents: BigInt!
+  ongoingUsageBalanceCents: BigInt!
   rateAmount: Float!
   recurringTransactionRules: [RecurringTransactionRule!]
   status: WalletStatusEnum!

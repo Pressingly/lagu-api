@@ -8,10 +8,12 @@ RSpec.describe BillableMetrics::Breakdown::SumService, type: :service, transacti
       event_store_class:,
       charge:,
       subscription:,
-      group:,
       boundaries: {
         from_datetime:,
         to_datetime:,
+      },
+      filters: {
+        group:,
       },
     )
   end
@@ -57,6 +59,7 @@ RSpec.describe BillableMetrics::Breakdown::SumService, type: :service, transacti
     create_list(
       :event,
       2,
+      organization_id: organization.id,
       code: billable_metric.code,
       customer:,
       subscription:,
@@ -69,6 +72,7 @@ RSpec.describe BillableMetrics::Breakdown::SumService, type: :service, transacti
   let(:latest_events) do
     create(
       :event,
+      organization_id: organization.id,
       code: billable_metric.code,
       customer:,
       subscription:,

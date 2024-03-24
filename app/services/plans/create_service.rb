@@ -64,6 +64,18 @@ module Plans
             end
           end
         end
+
+        if args[:minimum_commitment].present? && License.premium?
+          minimum_commitment = args[:minimum_commitment]
+          new_commitment = create_commitment(plan, minimum_commitment, :minimum_commitment)
+          if minimum_commitment[:tax_codes].present?
+            taxes_result = Commitments::ApplyTaxesService.call(
+              commitment: new_commitment,
+              tax_codes: minimum_commitment[:tax_codes],
+            )
+            return taxes_result unless taxes_result.success?
+          end
+        end
       end
 
       result.plan = plan
@@ -75,6 +87,15 @@ module Plans
 
     private
 
+    def create_commitment(plan, args, commitment_type)
+      Commitment.create!(
+        plan:,
+        commitment_type:,
+        invoice_display_name: args[:invoice_display_name],
+        amount_cents: args[:amount_cents],
+      )
+    end
+
     def create_charge(plan, args)
       charge = plan.charges.new(
         billable_metric_id: args[:billable_metric_id],
@@ -82,10 +103,22 @@ module Plans
         charge_model: charge_model(args),
         pay_in_advance: args[:pay_in_advance] || false,
         prorated: args[:prorated] || false,
-        properties: args[:properties].presence || Charges::BuildDefaultPropertiesService.call(charge_model(args)),
         group_properties: (args[:group_properties] || []).map { |gp| GroupProperty.new(gp) },
         charge_group_id: args[:charge_group_id] || nil,
       )
+
+      properties = args[:properties].presence || Charges::BuildDefaultPropertiesService.call(charge_model(args))
+      charge.properties = Charges::FilterChargeModelPropertiesService.call(
+        charge_model: charge.charge_model,
+        properties:,
+      ).properties
+
+      if args[:filters].present?
+        ChargeFilters::CreateOrUpdateBatchService.call(
+          charge:,
+          filters_params: args[:filters].map(&:with_indifferent_access),
+        ).raise_if_error!
+      end
 
       if License.premium?
         charge.invoiceable = args[:invoiceable] unless args[:invoiceable].nil?

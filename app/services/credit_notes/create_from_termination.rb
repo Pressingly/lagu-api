@@ -2,9 +2,10 @@
 
 module CreditNotes
   class CreateFromTermination < BaseService
-    def initialize(subscription:, reason: 'order_change')
+    def initialize(subscription:, reason: 'order_change', upgrade: false)
       @subscription = subscription
       @reason = reason
+      @upgrade = upgrade
 
       super
     end
@@ -14,6 +15,11 @@ module CreditNotes
 
       amount = compute_amount
       return result unless amount.positive?
+
+      # NOTE: In some cases, if the fee was already prorated (in case of multiple upgrade) the amount
+      #       could be greater than the last subscription fee amount.
+      #       In that case, we have to use the last subscription fee amount
+      amount = last_subscription_fee.amount_cents if amount > last_subscription_fee.amount_cents
 
       # NOTE: if credit notes were already issued on the fee,
       #       we have to deduct them from the prorated amount
@@ -37,7 +43,7 @@ module CreditNotes
 
     private
 
-    attr_accessor :subscription, :reason
+    attr_accessor :subscription, :reason, :upgrade
 
     delegate :plan, :terminated_at, :customer, to: :subscription
 
@@ -56,12 +62,16 @@ module CreditNotes
       )
     end
 
+    def plan_amount_cents
+      last_subscription_fee&.amount_details&.[]('plan_amount_cents') || plan.amount_cents
+    end
+
     def to_date
       date_service.next_end_of_period.to_date
     end
 
     def day_price
-      date_service.single_day_price
+      date_service.single_day_price(plan_amount_cents:)
     end
 
     def terminated_at_in_timezone
@@ -70,16 +80,19 @@ module CreditNotes
 
     def remaining_duration
       billed_from = terminated_at_in_timezone.end_of_day.utc.to_date
+      billed_from -= 1.day if upgrade
 
       if plan.has_trial? && subscription.trial_end_date >= billed_from
         billed_from = if subscription.trial_end_date > to_date
           to_date
         else
-          subscription.trial_end_date
+          subscription.trial_end_date - 1.day
         end
       end
 
-      (to_date - billed_from).to_i
+      duration = (to_date - billed_from).to_i
+
+      duration.negative? ? 0 : duration
     end
 
     def creditable_amount_cents(item_amount)

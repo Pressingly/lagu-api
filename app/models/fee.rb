@@ -8,6 +8,7 @@ class Fee < ApplicationRecord
   belongs_to :add_on, -> { with_discarded }, optional: true
   belongs_to :applied_add_on, optional: true
   belongs_to :subscription, optional: true
+  belongs_to :charge_filter, -> { with_discarded }, optional: true
   belongs_to :group, -> { with_discarded }, optional: true
   belongs_to :invoiceable, polymorphic: true, optional: true
   belongs_to :true_up_parent_fee, class_name: 'Fee', optional: true
@@ -30,7 +31,7 @@ class Fee < ApplicationRecord
   monetize :unit_amount_cents, disable_validation: true, allow_nil: true, with_model_currency: :currency
 
   # TODO: Deprecate add_on type in the near future
-  FEE_TYPES = %i[charge add_on subscription credit].freeze
+  FEE_TYPES = %i[charge add_on subscription credit commitment].freeze
   PAYMENT_STATUS = %i[pending succeeded failed refunded].freeze
 
   enum fee_type: FEE_TYPES
@@ -44,6 +45,9 @@ class Fee < ApplicationRecord
 
   scope :subscription_kind, -> { where(fee_type: :subscription) }
   scope :charge_kind, -> { where(fee_type: :charge) }
+  scope :commitment_kind, -> { where(fee_type: :commitment) }
+
+  scope :positive_units, -> { where('units > ?', 0) }
 
   # NOTE: pay_in_advance fees are not be linked to any invoice, but add_on fees does not have any subscriptions
   #       so we need a bit of logic to find the fee in the right organization scope
@@ -97,6 +101,16 @@ class Fee < ApplicationRecord
 
   def group_name
     charge&.group_properties&.find_by(group:)&.invoice_display_name || group&.name
+  end
+
+  def invoice_sorting_clause
+    base_clause = "#{invoice_name} #{group_name}".downcase
+
+    return base_clause unless charge?
+    return base_clause unless charge.standard?
+    return base_clause if charge.properties['grouped_by'].blank?
+
+    "#{invoice_name} #{grouped_by.values.join} #{group_name}".downcase
   end
 
   def currency

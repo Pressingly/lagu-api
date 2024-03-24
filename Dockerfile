@@ -1,19 +1,19 @@
-FROM ruby:3.2.2-slim as build
+FROM ruby:3.2.3-slim as build
 
 WORKDIR /app
 
 COPY ./Gemfile /app/Gemfile
 COPY ./Gemfile.lock /app/Gemfile.lock
 
-RUN apt update -qq && apt install nodejs build-essential git pkg-config libpq-dev -y
+RUN apt update -qq && apt install nodejs build-essential git pkg-config libpq-dev curl -y
 
-ENV BUNDLER_VERSION='2.4.21'
-RUN gem install bundler --no-document -v '2.4.21'
+ENV BUNDLER_VERSION='2.5.5'
+RUN gem install bundler --no-document -v '2.5.5'
 
 RUN bundle config build.nokogiri --use-system-libraries &&\
   bundle install --jobs=3 --retry=3
 
-FROM ruby:3.2.2-slim
+FROM ruby:3.2.3-slim
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ ARG SEGMENT_WRITE_KEY
 ARG GOCARDLESS_CLIENT_ID
 ARG GOCARDLESS_CLIENT_SECRET
 
-RUN apt update -qq && apt install git libpq-dev -y
+RUN apt update -qq && apt install git libpq-dev curl -y
 
 ENV SEGMENT_WRITE_KEY $SEGMENT_WRITE_KEY
 ENV GOCARDLESS_CLIENT_ID $GOCARDLESS_CLIENT_ID

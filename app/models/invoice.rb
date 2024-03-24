@@ -9,8 +9,8 @@ class Invoice < ApplicationRecord
   CREDIT_NOTES_MIN_VERSION = 2
   COUPON_BEFORE_VAT_VERSION = 3
 
-  before_save :ensure_organization_sequential_id, if: -> { organization.per_organization? }
-  before_save :ensure_number
+  before_create :ensure_organization_sequential_id, if: -> { organization.per_organization? }
+  before_create :ensure_number
 
   belongs_to :customer, -> { with_discarded }
   belongs_to :organization
@@ -137,6 +137,16 @@ class Invoice < ApplicationRecord
     invoice_subscription(subscription_id).fees
   end
 
+  def existing_fees_in_interval?(subscription_id:, charge_in_advance: false)
+    subscription_fees(subscription_id)
+      .charge_kind
+      .positive_units
+      .where(true_up_parent_fee: nil)
+      .joins(:charge)
+      .where(charge: { pay_in_advance: charge_in_advance })
+      .any?
+  end
+
   def recurring_fees(subscription_id)
     subscription_fees(subscription_id)
       .joins(charge: :billable_metric)
@@ -159,11 +169,12 @@ class Invoice < ApplicationRecord
       event_store_class: Events::Stores::PostgresStore,
       charge: fee.charge,
       subscription: fee.subscription,
-      group: fee.group,
       boundaries: {
         from_datetime: DateTime.parse(fee.properties['charges_from_datetime']),
         to_datetime: DateTime.parse(fee.properties['charges_to_datetime']),
+        charges_duration: fee.properties['charges_duration'],
       },
+      filters: { group: fee.group },
     ).breakdown.breakdown
   end
 
@@ -268,7 +279,7 @@ class Invoice < ApplicationRecord
       self.number = "#{customer_slug}-#{formatted_sequential_id}"
     else
       org_formatted_sequential_id = format('%03d', organization_sequential_id)
-      formatted_year_and_month = Time.now.utc.strftime('%Y%m')
+      formatted_year_and_month = Time.now.in_time_zone(organization.timezone || 'UTC').strftime('%Y%m')
 
       self.number = "#{organization.document_number_prefix}-#{formatted_year_and_month}-#{org_formatted_sequential_id}"
     end
@@ -281,9 +292,11 @@ class Invoice < ApplicationRecord
   end
 
   def generate_organization_sequential_id
+    timezone = organization.timezone || 'UTC'
     organization_sequence_scope = organization.invoices.where(
-      "date_trunc('month', created_at)::date = ?",
-      Time.now.utc.beginning_of_month.to_date,
+      "date_trunc('month', created_at::timestamptz AT TIME ZONE ?)::date = ?",
+      timezone,
+      Time.now.in_time_zone(timezone).beginning_of_month.to_date,
     )
 
     result = Invoice.with_advisory_lock(
@@ -291,8 +304,17 @@ class Invoice < ApplicationRecord
       transaction: true,
       timeout_seconds: 10.seconds,
     ) do
-      organization_sequential_id = organization_sequence_scope.count
-      organization_sequential_id ||= 0
+      # If previous invoice had different numbering, base sequential id is the total number of invoices
+      organization_sequential_id = if switched_from_customer_numbering?
+        organization.invoices.count
+      else
+        organization
+          .invoices
+          .where.not(organization_sequential_id: 0)
+          .order(organization_sequential_id: :desc)
+          .limit(1)
+          .pick(:organization_sequential_id) || 0
+      end
 
       # NOTE: Start with the most recent sequential id and find first available sequential id that haven't occurred
       loop do
@@ -306,5 +328,13 @@ class Invoice < ApplicationRecord
     raise(SequenceError, 'Unable to acquire lock on the database') unless result
 
     result
+  end
+
+  def switched_from_customer_numbering?
+    last_invoice = organization.invoices.order(created_at: :desc).first
+
+    return false unless last_invoice
+
+    last_invoice&.organization_sequential_id&.zero?
   end
 end

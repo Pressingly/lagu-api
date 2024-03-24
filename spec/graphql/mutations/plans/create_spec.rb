@@ -7,6 +7,9 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
   let(:organization) { membership.organization }
   let(:plan_tax) { create(:tax, organization:) }
   let(:charge_tax) { create(:tax, organization:) }
+  let(:commitment_tax) { create(:tax, organization:) }
+  let(:minimum_commitment_invoice_display_name) { 'Minimum spending' }
+  let(:minimum_commitment_amount_cents) { 100 }
 
   let(:mutation) do
     <<~GQL
@@ -21,6 +24,12 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
           amountCents,
           amountCurrency,
           taxes { id code rate }
+          minimumCommitment {
+            id,
+            amountCents,
+            invoiceDisplayName,
+            taxes { id code rate }
+          }
           charges {
             id,
             chargeModel,
@@ -55,6 +64,11 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
                 volumeRanges { fromValue, toValue }
               }
             }
+            filters {
+              invoiceDisplayName
+              values
+              properties { amount }
+            }
           }
         }
       }
@@ -67,6 +81,16 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
 
   let(:first_group) { create(:group, billable_metric: billable_metrics[1]) }
   let(:second_group) { create(:group, billable_metric: billable_metrics[2]) }
+
+  let(:billable_metric_filter) do
+    create(
+      :billable_metric_filter,
+      billable_metric: billable_metrics[0],
+      key: 'payment_method',
+      values: %w[card sepa],
+    )
+  end
+
   let(:tax) { create(:tax, organization:) }
 
   around { |test| lago_premium!(&test) }
@@ -86,12 +110,24 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
           amountCents: 200,
           amountCurrency: 'EUR',
           taxCodes: [plan_tax.code],
+          minimumCommitment: {
+            amountCents: minimum_commitment_amount_cents,
+            invoiceDisplayName: minimum_commitment_invoice_display_name,
+            taxCodes: [commitment_tax.code],
+          },
           charges: [
             {
               billableMetricId: billable_metrics[0].id,
               chargeModel: 'standard',
               properties: { amount: '100.00' },
               taxCodes: [charge_tax.code],
+              filters: [
+                {
+                  invoiceDisplayName: 'Payment Method',
+                  properties: { amount: '100.00' },
+                  values: { billable_metric_filter.key => %w[card sepa] },
+                },
+              ],
             },
             {
               billableMetricId: billable_metrics[1].id,
@@ -210,6 +246,11 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
       expect(standard_charge['taxes'].count).to eq(1)
       expect(standard_charge['taxes'].first['code']).to eq(charge_tax.code)
 
+      filter = standard_charge['filters'].first
+      expect(filter['invoiceDisplayName']).to eq('Payment Method')
+      expect(filter['properties']['amount']).to eq('100.00')
+      expect(filter['values']).to eq('payment_method' => %w[card sepa])
+
       package_charge = result_data['charges'][1]
       expect(package_charge['chargeModel']).to eq('package')
       group_properties = package_charge['groupProperties'][0]['values']
@@ -238,6 +279,12 @@ RSpec.describe Mutations::Plans::Create, type: :graphql do
       graduated_percentage_charge = result_data['charges'][5]
       expect(graduated_percentage_charge['chargeModel']).to eq('graduated_percentage')
       expect(graduated_percentage_charge['properties']['graduatedPercentageRanges'].count).to eq(2)
+
+      expect(result_data['minimumCommitment']).to include(
+        'invoiceDisplayName' => minimum_commitment_invoice_display_name,
+        'amountCents' => minimum_commitment_amount_cents.to_s,
+      )
+      expect(result_data['minimumCommitment']['taxes'].count).to eq(1)
     end
   end
 

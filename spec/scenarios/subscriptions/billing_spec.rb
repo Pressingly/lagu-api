@@ -56,7 +56,7 @@ describe 'Billing Subscriptions Scenario', :scenarios, type: :request do
       end.to change { subscription.reload.invoices.count }.from(0).to(1)
 
       # Does not create invoices after the billing day
-      before_billing_times.each do |time|
+      after_billing_times.each do |time|
         travel_to(time) do
           Subscriptions::BillingService.new.call
           expect { perform_all_enqueued_jobs }.not_to change { subscription.reload.invoices.count }
@@ -375,6 +375,9 @@ describe 'Billing Subscriptions Scenario', :scenarios, type: :request do
             DateTime.new(2023, 10, 31, 2),
             DateTime.new(2023, 11, 30, 2),
             DateTime.new(2023, 12, 31, 2),
+            DateTime.new(2024, 1, 31, 2),
+            DateTime.new(2024, 2, 29, 2),
+            DateTime.new(2024, 3, 31, 2),
           ]
         end
 
@@ -398,6 +401,8 @@ describe 'Billing Subscriptions Scenario', :scenarios, type: :request do
             DateTime.new(2023, 10, 30, 2),
             DateTime.new(2023, 11, 30, 2),
             DateTime.new(2023, 12, 30, 2),
+            DateTime.new(2024, 2, 29, 2),
+            DateTime.new(2024, 3, 30, 2),
           ]
         end
 

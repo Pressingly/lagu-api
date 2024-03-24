@@ -51,6 +51,10 @@ FactoryBot.define do
     end
 
     total_aggregated_units { 0 }
+
+    trait :with_charge_filter do
+      charge_filter
+    end
   end
 
   factory :add_on_fee, class: 'Fee' do
@@ -79,5 +83,22 @@ FactoryBot.define do
 
     invoiceable_type { 'AddOn' }
     invoiceable_id { add_on.id }
+  end
+
+  factory :minimum_commitment_fee, class: 'Fee' do
+    invoice
+    fee_type { 'commitment' }
+    subscription
+
+    amount_cents { 200 }
+    amount_currency { 'EUR' }
+    taxes_amount_cents { 2 }
+
+    transient do
+      commitment { subscription.plan.minimum_commitment.presence || create(:commitment, plan: subscription.plan) }
+    end
+
+    invoiceable_type { 'Commitment' }
+    invoiceable_id { commitment.id }
   end
 end

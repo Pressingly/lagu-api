@@ -19,11 +19,12 @@ module Invoices
       result.not_found_failure!(resource: 'customer')
     end
 
-    def usage
+    def call
       return result.not_found_failure!(resource: 'customer') unless @customer
       return result.not_allowed_failure!(code: 'no_active_subscription') if subscription.blank?
 
       result.usage = compute_usage
+      result.invoice = invoice
       result
     end
 
@@ -114,12 +115,7 @@ module Invoices
     end
 
     def charge_cache_key(charge)
-      [
-        'charge-usage',
-        charge.id,
-        subscription.id,
-        charge.updated_at.iso8601,
-      ].join('/')
+      Subscriptions::ChargeCacheService.new(subscription:, charge:).cache_key
     end
 
     def charge_cache_expiration

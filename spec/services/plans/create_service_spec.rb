@@ -13,6 +13,9 @@ RSpec.describe Plans::CreateService, type: :service do
     let(:plan_invoice_display_name) { 'Some plan invoice name' }
     let(:billable_metric) { create(:billable_metric, organization:) }
     let(:sum_billable_metric) { create(:sum_billable_metric, organization:, recurring: true) }
+    let(:billable_metric_filter) do
+      create(:billable_metric_filter, billable_metric:, key: 'payment_method', values: %w[card physical])
+    end
     let(:group) { create(:group, billable_metric:) }
     let(:plan_tax) { create(:tax, organization:) }
     let(:charge_tax) { create(:tax, organization:) }
@@ -28,8 +31,20 @@ RSpec.describe Plans::CreateService, type: :service do
         amount_currency: 'EUR',
         tax_codes: [plan_tax.code],
         charges: charges_args,
+        minimum_commitment: minimum_commitment_args,
       }
     end
+
+    let(:minimum_commitment_args) do
+      {
+        amount_cents: minimum_commitment_amount_cents,
+        invoice_display_name: minimum_commitment_invoice_display_name,
+        tax_codes: [plan_tax.code],
+      }
+    end
+
+    let(:minimum_commitment_invoice_display_name) { 'Minimum spending' }
+    let(:minimum_commitment_amount_cents) { 100 }
 
     let(:charges_args) do
       [
@@ -42,6 +57,13 @@ RSpec.describe Plans::CreateService, type: :service do
             {
               group_id: group.id,
               values: { amount: '100' },
+            },
+          ],
+          filters: [
+            {
+              values: { billable_metric_filter.key => ['card'] },
+              invoice_display_name: 'Card filter',
+              properties: { amount: '90' },
             },
           ],
         },
@@ -83,6 +105,14 @@ RSpec.describe Plans::CreateService, type: :service do
       expect(plan.invoice_display_name).to eq(plan_invoice_display_name)
     end
 
+    it 'does not create minimum commitment' do
+      plans_service.create(**create_args)
+
+      plan = Plan.order(:created_at).last
+
+      expect(plan.minimum_commitment).to be_nil
+    end
+
     it 'creates charges' do
       plans_service.create(**create_args)
 
@@ -105,6 +135,14 @@ RSpec.describe Plans::CreateService, type: :service do
           group_id: group.id,
           values: { 'amount' => '100' },
         },
+      )
+      expect(standard_charge.filters.first).to have_attributes(
+        invoice_display_name: 'Card filter',
+        properties: { 'amount' => '90' },
+      )
+      expect(standard_charge.filters.first.values.first).to have_attributes(
+        billable_metric_filter_id: billable_metric_filter.id,
+        values: ['card'],
       )
 
       expect(graduated_charge).to have_attributes(pay_in_advance: true, invoiceable: true, prorated: false)
@@ -181,6 +219,13 @@ RSpec.describe Plans::CreateService, type: :service do
       it 'saves premium attributes' do
         plan = plans_service.create(**create_args).plan
 
+        expect(plan.minimum_commitment).to have_attributes(
+          {
+            amount_cents: minimum_commitment_amount_cents,
+            invoice_display_name: minimum_commitment_invoice_display_name,
+          },
+        )
+
         expect(plan.charges.standard.first).to have_attributes(
           {
             pay_in_advance: false,
@@ -188,6 +233,7 @@ RSpec.describe Plans::CreateService, type: :service do
             invoiceable: true,
           },
         )
+
         expect(plan.charges.graduated_percentage.first).to have_attributes(
           {
             pay_in_advance: true,

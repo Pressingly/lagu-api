@@ -26,11 +26,37 @@ class InvoiceSubscription < ApplicationRecord
   #       It is used to prevent double billing on billing day
   scope :recurring, -> { where(recurring: true) }
 
+  def self.matching?(subscription, boundaries, recurring: true)
+    base_query = InvoiceSubscription
+      .where(subscription_id: subscription.id)
+      .where(from_datetime: boundaries[:from_datetime])
+      .where(to_datetime: boundaries[:to_datetime])
+
+    base_query = base_query.recurring if recurring
+
+    if subscription.plan.yearly? && subscription.plan.bill_charges_monthly?
+      base_query = base_query
+        .where(charges_from_datetime: boundaries[:charges_from_datetime])
+        .where(charges_to_datetime: boundaries[:charges_to_datetime])
+    end
+
+    base_query.exists?
+  end
+
   def fees
     @fees ||= Fee.where(
       subscription_id: subscription.id,
       invoice_id: invoice.id,
     )
+  end
+
+  def previous_invoice_subscription
+    self.class
+      .where(subscription:)
+      .where('from_datetime <= ?', from_datetime)
+      .where.not(id:)
+      .order(from_datetime: :desc)
+      .find(&:subscription_fee)
   end
 
   def charge_amount_cents
@@ -43,6 +69,10 @@ class InvoiceSubscription < ApplicationRecord
 
   def subscription_fee
     fees.subscription_kind.first
+  end
+
+  def commitment_fee
+    fees.commitment_kind.first
   end
 
   def total_amount_cents

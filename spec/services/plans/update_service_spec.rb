@@ -31,6 +31,17 @@ RSpec.describe Plans::UpdateService, type: :service do
     }
   end
 
+  let(:minimum_commitment_args) do
+    {
+      amount_cents: minimum_commitment_amount_cents,
+      invoice_display_name: minimum_commitment_invoice_display_name,
+      tax_codes: [tax1.code],
+    }
+  end
+
+  let(:minimum_commitment_invoice_display_name) { 'Minimum spending' }
+  let(:minimum_commitment_amount_cents) { 100 }
+
   let(:charges_args) do
     [
       {
@@ -115,6 +126,84 @@ RSpec.describe Plans::UpdateService, type: :service do
       end
     end
 
+    context 'when plan amount is updated' do
+      let(:new_customer) { create(:customer, organization:) }
+      let(:subscription) { create(:subscription, plan:, customer: new_customer) }
+      let(:update_args) do
+        {
+          name: plan_name,
+          code: 'new_plan',
+          interval: 'monthly',
+          pay_in_advance: false,
+          amount_cents: 5,
+          amount_currency: 'EUR',
+        }
+      end
+
+      before { subscription }
+
+      it 'correctly updates plan' do
+        result = plans_service.call
+
+        updated_plan = result.plan
+        aggregate_failures do
+          expect(updated_plan.name).to eq('Updated plan name')
+          expect(updated_plan.amount_cents).to eq(5)
+        end
+      end
+
+      context 'when there are pending subscriptions which are not relevant after the amount cents decrease' do
+        let(:pending_plan) { create(:plan, organization:, amount_cents: 10) }
+        let(:pending_subscription) do
+          create(:subscription, plan: pending_plan, status: :pending, previous_subscription_id: subscription.id)
+        end
+
+        before { pending_subscription }
+
+        it 'correctly cancels pending subscriptions' do
+          result = plans_service.call
+
+          updated_plan = result.plan
+          aggregate_failures do
+            expect(updated_plan.name).to eq('Updated plan name')
+            expect(updated_plan.amount_cents).to eq(5)
+            expect(Subscription.find_by(id: pending_subscription.id).status).to eq('canceled')
+          end
+        end
+      end
+
+      context 'when there are pending subscriptions which are not relevant after the amount cents increase' do
+        let(:original_plan) { create(:plan, organization:, amount_cents: 150) }
+        let(:subscription) { create(:subscription, plan: original_plan, customer: new_customer) }
+        let(:pending_subscription) do
+          create(:subscription, plan:, status: :pending, previous_subscription_id: subscription.id)
+        end
+        let(:update_args) do
+          {
+            name: plan_name,
+            code: 'new_plan',
+            interval: 'monthly',
+            pay_in_advance: false,
+            amount_cents: 200,
+            amount_currency: 'EUR',
+          }
+        end
+
+        before { pending_subscription }
+
+        it 'correctly cancels pending subscriptions' do
+          result = plans_service.call
+
+          updated_plan = result.plan
+          aggregate_failures do
+            expect(updated_plan.name).to eq('Updated plan name')
+            expect(updated_plan.amount_cents).to eq(200)
+            expect(Subscription.find_by(id: pending_subscription.id).status).to eq('canceled')
+          end
+        end
+      end
+    end
+
     context 'when plan is not found' do
       let(:applied_tax) { nil }
       let(:plan) { nil }
@@ -139,6 +228,29 @@ RSpec.describe Plans::UpdateService, type: :service do
           expect(result).not_to be_success
           expect(result.error).to be_a(BaseService::ValidationFailure)
           expect(result.error.messages[:name]).to eq(['value_is_mandatory'])
+        end
+      end
+
+      context 'with new charge' do
+        let(:plan_name) { 'foo' }
+
+        let(:charges_args) do
+          [
+            {
+              billable_metric_id: sum_billable_metric.id,
+              charge_model: 'standard',
+              pay_in_advance: false,
+              invoiceable: true,
+              properties: {
+                amount: '100',
+              },
+            },
+          ]
+        end
+
+        it 'updates the plan' do
+          result = plans_service.call
+          expect(result.plan.charges.count).to eq(1)
         end
       end
 
@@ -213,6 +325,176 @@ RSpec.describe Plans::UpdateService, type: :service do
       end
     end
 
+    context 'when plan has no minimum commitment' do
+      context 'when minimum commitment arguments are present' do
+        before { update_args.merge!({ minimum_commitment: minimum_commitment_args }) }
+
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'creates minimum commitment' do
+            result = plans_service.call
+            commitment = result.plan.minimum_commitment
+
+            aggregate_failures do
+              expect(commitment.amount_cents).to eq(minimum_commitment_args[:amount_cents])
+              expect(commitment.invoice_display_name).to eq(minimum_commitment_args[:invoice_display_name])
+            end
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not create minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).to be_nil
+          end
+        end
+      end
+
+      context 'when minimum commitment arguments are not present' do
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'does not create minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).to be_nil
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not create minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).to be_nil
+          end
+        end
+      end
+
+      context 'when minimum commitment arguments is an empty hash' do
+        before { update_args.merge!({ minimum_commitment: {} }) }
+
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'does not create minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).to be_nil
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not create minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).to be_nil
+          end
+        end
+      end
+    end
+
+    context 'when plan has minimum commitment' do
+      let(:minimum_commitment) { create(:commitment, plan:) }
+
+      before { minimum_commitment }
+
+      context 'when minimum commitment arguments are present' do
+        before { update_args.merge!({ minimum_commitment: minimum_commitment_args }) }
+
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'updates minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment.amount_cents).to eq(minimum_commitment_args[:amount_cents])
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not update minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment.amount_cents).not_to eq(update_args[:amount_cents])
+          end
+        end
+      end
+
+      context 'when only some minimum commitment arguments are present' do
+        let(:minimum_commitment_args) do
+          { invoice_display_name: minimum_commitment_invoice_display_name }
+        end
+
+        before { update_args.merge!({ minimum_commitment: minimum_commitment_args }) }
+
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'does not update minimum commitment args that are not present' do
+            result = plans_service.call
+
+            aggregate_failures do
+              expect(result.plan.minimum_commitment.invoice_display_name).to eq(minimum_commitment_invoice_display_name)
+              expect(result.plan.minimum_commitment.amount_cents).to eq(minimum_commitment.amount_cents)
+            end
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not update minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment.invoice_display_name).to eq(minimum_commitment.invoice_display_name)
+            expect(result.plan.minimum_commitment.amount_cents).to eq(minimum_commitment.amount_cents)
+          end
+        end
+      end
+
+      context 'when minimum commitment arguments are not present' do
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'does not update minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment.amount_cents).not_to eq(update_args[:amount_cents])
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not update minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment.amount_cents).not_to eq(update_args[:amount_cents])
+          end
+        end
+      end
+
+      context 'when minimum commitment arguments is an empty hash' do
+        before { update_args.merge!({ minimum_commitment: {} }) }
+
+        context 'when license is premium' do
+          around { |test| lago_premium!(&test) }
+
+          it 'deletes plan minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).to be_nil
+          end
+        end
+
+        context 'when license is not premium' do
+          it 'does not delete minimum commitment' do
+            result = plans_service.call
+
+            expect(result.plan.minimum_commitment).not_to be_nil
+          end
+        end
+      end
+    end
+
     context 'with existing charges' do
       let!(:existing_charge) do
         create(
@@ -223,6 +505,15 @@ RSpec.describe Plans::UpdateService, type: :service do
           properties: {
             amount: '300',
           },
+        )
+      end
+
+      let(:billable_metric_filter) do
+        create(
+          :billable_metric_filter,
+          billable_metric: sum_billable_metric,
+          key: 'payment_method',
+          values: %w[card physical],
         )
       end
 
@@ -247,6 +538,13 @@ RSpec.describe Plans::UpdateService, type: :service do
                 {
                   group_id: group.id,
                   values: { amount: '100' },
+                },
+              ],
+              filters: [
+                {
+                  invoice_display_name: 'Card filter',
+                  properties: { amount: '90' },
+                  values: { billable_metric_filter.key => ['card'] },
                 },
               ],
             },
@@ -281,6 +579,15 @@ RSpec.describe Plans::UpdateService, type: :service do
         expect(existing_charge.group_properties.first).to have_attributes(
           group_id: group.id,
           values: { 'amount' => '100' },
+        )
+
+        expect(existing_charge.filters.first).to have_attributes(
+          invoice_display_name: 'Card filter',
+          properties: { 'amount' => '90' },
+        )
+        expect(existing_charge.filters.first.values.first).to have_attributes(
+          billable_metric_filter_id: billable_metric_filter.id,
+          values: ['card'],
         )
       end
 

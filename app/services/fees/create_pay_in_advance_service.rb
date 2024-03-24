@@ -45,6 +45,7 @@ module Fees
         cache_aggregation_result(aggregation_result:, group:)
 
         result = apply_charge_model(aggregation_result:, properties:)
+        unit_amount_cents = result.unit_amount * subscription.plan.amount.currency.subunit_to_unit
 
         fee = Fee.new(
           subscription:,
@@ -62,6 +63,9 @@ module Fees
           payment_status: :pending,
           pay_in_advance: true,
           taxes_amount_cents: 0,
+          unit_amount_cents:,
+          precise_unit_amount: result.unit_amount,
+          grouped_by: format_grouped_by,
         )
 
         taxes_result = Fees::ApplyTaxesService.call(fee:)
@@ -113,6 +117,7 @@ module Fees
         to_datetime: date_service.to_datetime,
         charges_from_datetime: date_service.charges_from_datetime,
         charges_to_datetime: date_service.charges_to_datetime,
+        charges_duration: date_service.charges_duration_in_days,
         timestamp: Time.current,
       }
     end
@@ -173,7 +178,14 @@ module Fees
         current_aggregation: aggregation_result.current_aggregation,
         max_aggregation: aggregation_result.max_aggregation,
         max_aggregation_with_proration: aggregation_result.max_aggregation_with_proration,
+        grouped_by: format_grouped_by,
       )
+    end
+
+    def format_grouped_by
+      return {} if charge.properties['grouped_by'].blank?
+
+      charge.properties['grouped_by'].index_with { event.properties[_1] }
     end
   end
 end
