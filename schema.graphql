@@ -245,6 +245,36 @@ type Charge {
   updatedAt: ISO8601DateTime!
 }
 
+"""
+Charge filters object
+"""
+type ChargeFilter {
+  id: ID!
+  invoiceDisplayName: String
+  properties: Properties!
+  values: ChargeFilterValues!
+}
+
+"""
+Charge filters input arguments
+"""
+input ChargeFilterInput {
+  invoiceDisplayName: String
+  properties: PropertiesInput!
+  values: ChargeFilterValues!
+}
+
+type ChargeFilterUsage {
+  amountCents: BigInt!
+  eventsCount: Int!
+  id: ID!
+  invoiceDisplayName: String
+  units: Float!
+  values: ChargeFilterValues!
+}
+
+scalar ChargeFilterValues
+
 type ChargeGroup {
   charges: [Charge!]
   createdAt: ISO8601DateTime!
@@ -277,36 +307,6 @@ input ChargeGroupPropertiesInput {
   amount: String
   freeUnits: BigInt
 }
-
-"""
-Charge filters object
-"""
-type ChargeFilter {
-  id: ID!
-  invoiceDisplayName: String
-  properties: Properties!
-  values: ChargeFilterValues!
-}
-
-"""
-Charge filters input arguments
-"""
-input ChargeFilterInput {
-  invoiceDisplayName: String
-  properties: PropertiesInput!
-  values: ChargeFilterValues!
-}
-
-type ChargeFilterUsage {
-  amountCents: BigInt!
-  eventsCount: Int!
-  id: ID!
-  invoiceDisplayName: String
-  units: Float!
-  values: ChargeFilterValues!
-}
-
-scalar ChargeFilterValues
 
 input ChargeInput {
   billableMetricId: ID!
@@ -4410,7 +4410,7 @@ type Organization {
   logoUrl: String
   name: String!
   netPaymentTerm: Int!
-  pinetPaymentProvider: PinetProvider
+  pinetPaymentProvider: [PinetProvider!]
   state: String
   stripePaymentProviders: [StripeProvider!]
   taxIdentificationNumber: String
@@ -4451,18 +4451,18 @@ input OrganizationBillingConfigurationInput {
   invoiceGracePeriod: Int
 }
 
+union PaymentProvider = AdyenProvider | GocardlessProvider | StripeProvider
+
+type PaymentProviderCollection {
+  collection: [PaymentProvider!]!
+  metadata: CollectionMetadata!
+}
+
 type PinetProvider {
   id: ID!
   keyId: String!
   privateKey: String!
   successRedirectUrl: String
-}
-
-union PaymentProvider = AdyenProvider | GocardlessProvider | StripeProvider | PinetProvider
-
-type PaymentProviderCollection {
-  collection: [PaymentProvider!]!
-  metadata: CollectionMetadata!
 }
 
 type Plan {
