@@ -180,19 +180,6 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_14_163426) do
     t.index ["organization_id"], name: "index_cached_aggregations_on_organization_id"
   end
 
-  create_table "charge_groups", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.datetime "deleted_at"
-    t.boolean "pay_in_advance", default: false, null: false
-    t.bigint "min_amount_cents", default: 0, null: false
-    t.boolean "invoiceable", default: true, null: false
-    t.string "invoice_display_name"
-    t.jsonb "properties", default: {}, null: false
-    t.uuid "plan_id"
-    t.index ["plan_id"], name: "index_charge_groups_on_plan_id"
-  end
-  
   create_table "charge_filter_values", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "charge_filter_id", null: false
     t.uuid "billable_metric_filter_id", null: false
@@ -214,6 +201,19 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_14_163426) do
     t.string "invoice_display_name"
     t.index ["charge_id"], name: "index_charge_filters_on_charge_id"
     t.index ["deleted_at"], name: "index_charge_filters_on_deleted_at"
+  end
+
+  create_table "charge_groups", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.boolean "pay_in_advance", default: false, null: false
+    t.bigint "min_amount_cents", default: 0, null: false
+    t.boolean "invoiceable", default: true, null: false
+    t.string "invoice_display_name"
+    t.jsonb "properties", default: {}, null: false
+    t.uuid "plan_id"
+    t.index ["plan_id"], name: "index_charge_groups_on_plan_id"
   end
 
   create_table "charges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -1002,10 +1002,10 @@ ActiveRecord::Schema[7.0].define(version: 2024_03_14_163426) do
   add_foreign_key "billable_metric_filters", "billable_metrics"
   add_foreign_key "billable_metrics", "organizations"
   add_foreign_key "cached_aggregations", "groups"
-  add_foreign_key "charge_groups", "plans"
   add_foreign_key "charge_filter_values", "billable_metric_filters"
   add_foreign_key "charge_filter_values", "charge_filters"
   add_foreign_key "charge_filters", "charges"
+  add_foreign_key "charge_groups", "plans"
   add_foreign_key "charges", "billable_metrics"
   add_foreign_key "charges", "charge_groups"
   add_foreign_key "charges", "plans"

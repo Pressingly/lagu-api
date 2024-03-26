@@ -14,12 +14,14 @@ class AddCodeAndNameToPaymentProviders < ActiveRecord::Migration[7.0]
           CASE WHEN type = 'PaymentProviders::AdyenProvider' THEN 'Adyen Account 1'
                WHEN type = 'PaymentProviders::GocardlessProvider' THEN 'GoCardless Account 1'
                WHEN type = 'PaymentProviders::StripeProvider' THEN 'Stripe Account 1'
+               WHEN type = 'PaymentProviders::PinetProvider' THEN 'Pinet Account 1'
                END
         ),
         code = (
           CASE WHEN type = 'PaymentProviders::AdyenProvider' THEN 'adyen_account_1'
                WHEN type = 'PaymentProviders::GocardlessProvider' THEN 'gocardless_account_1'
                WHEN type = 'PaymentProviders::StripeProvider' THEN 'stripe_account_1'
+               WHEN type = 'PaymentProviders::PinetProvider' THEN 'pinet_account_1'
                END
         )
     SQL

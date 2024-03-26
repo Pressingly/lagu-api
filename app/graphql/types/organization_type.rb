@@ -40,7 +40,7 @@ module Types
     field :gocardless_payment_providers, [Types::PaymentProviders::Gocardless], null: true
     field :stripe_payment_providers, [Types::PaymentProviders::Stripe], null: true
     # TODO: Check merging conflict. Payment providers are refactored from has_one to has_many
-    field :pinet_payment_provider, [Types::PaymentProviders::Pinet], null: true
+    field :pinet_payment_providers, [Types::PaymentProviders::Pinet], null: true
 
     def billing_configuration
       {

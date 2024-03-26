@@ -36,7 +36,7 @@ class Organization < ApplicationRecord
   has_many :gocardless_payment_providers, class_name: 'PaymentProviders::GocardlessProvider'
   has_many :adyen_payment_providers, class_name: 'PaymentProviders::AdyenProvider'
   # TODO: Check merging conflict. Payment providers are refactored from has_one to has_many
-  has_many :pinet_payment_provider, class_name: 'PaymentProviders::PinetProvider'
+  has_many :pinet_payment_providers, class_name: 'PaymentProviders::PinetProvider'
 
   has_one_attached :logo
 
@@ -96,6 +96,8 @@ class Organization < ApplicationRecord
       gocardless_payment_provider
     when 'adyen'
       adyen_payment_provider
+    when 'pinet'
+      pinet_payment_provider
     end
   end
 
