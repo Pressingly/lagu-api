@@ -23,7 +23,9 @@ module V1
               code: fee.billable_metric.code,
               aggregation_type: fee.billable_metric.aggregation_type,
             },
+            filters: filters(fees),
             groups: groups(fees),
+            grouped_usage: grouped_usage(fees),
           }
         end
       end
@@ -43,6 +45,35 @@ module V1
             events_count: f.events_count,
           }
         end.compact
+      end
+
+      def filters(fees)
+        fees.sort_by { |f| f.charge_filter&.display_name.to_s }.map do |f|
+          next unless f.charge_filter
+
+          {
+            units: f.units,
+            amount_cents: f.amount_cents,
+            events_count: f.events_count,
+            invoice_display_name: f.charge_filter.display_name,
+            values: f.charge_filter.to_h,
+          }
+        end.compact
+      end
+
+      def grouped_usage(fees)
+        return [] unless fees.any? { |f| f.grouped_by.present? }
+
+        fees.group_by(&:grouped_by).values.map do |grouped_fees|
+          {
+            amount_cents: grouped_fees.sum(&:amount_cents),
+            events_count: grouped_fees.sum(&:events_count),
+            units: grouped_fees.map { |f| BigDecimal(f.units) }.sum.to_s,
+            grouped_by: grouped_fees.first.grouped_by,
+            filters: filters(grouped_fees),
+            groups: groups(grouped_fees),
+          }
+        end
       end
     end
   end

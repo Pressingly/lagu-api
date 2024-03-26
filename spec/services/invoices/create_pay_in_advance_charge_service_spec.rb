@@ -12,7 +12,7 @@ RSpec.describe Invoices::CreatePayInAdvanceChargeService, type: :service do
   let(:billable_metric) { create(:billable_metric, organization:) }
   let(:customer) { create(:customer, organization:) }
   let(:plan) { create(:plan, organization:) }
-  let(:subscription) { create(:active_subscription, customer:, plan:) }
+  let(:subscription) { create(:subscription, customer:, plan:) }
   let(:charge) { create(:standard_charge, :pay_in_advance, billable_metric:, plan:) }
   let(:group) { nil }
 
@@ -43,6 +43,7 @@ RSpec.describe Invoices::CreatePayInAdvanceChargeService, type: :service do
     let(:charge_result) do
       BaseService::Result.new.tap do |result|
         result.amount = 10
+        result.unit_amount = 0.01111111111
         result.count = 1
         result.units = 9
       end
@@ -90,6 +91,8 @@ RSpec.describe Invoices::CreatePayInAdvanceChargeService, type: :service do
           group: nil,
           pay_in_advance_event_id: event.id,
           payment_status: 'pending',
+          unit_amount_cents: 1,
+          precise_unit_amount: 0.01111111111,
         )
 
         expect(result.invoice.currency).to eq(customer.currency)
@@ -148,28 +151,28 @@ RSpec.describe Invoices::CreatePayInAdvanceChargeService, type: :service do
       end.to have_enqueued_job(SendWebhookJob).with('fee.created', Fee)
     end
 
-    it 'does not enqueue an ActionMailer::MailDeliveryJob' do
+    it 'does not enqueue an SendEmailJob' do
       expect do
         invoice_service.call
-      end.not_to have_enqueued_job(ActionMailer::MailDeliveryJob)
+      end.not_to have_enqueued_job(SendEmailJob)
     end
 
     context 'with lago_premium' do
       around { |test| lago_premium!(&test) }
 
-      it 'enqueues an ActionMailer::MailDeliveryJob' do
+      it 'enqueues an SendEmailJob' do
         expect do
           invoice_service.call
-        end.to have_enqueued_job(ActionMailer::MailDeliveryJob)
+        end.to have_enqueued_job(SendEmailJob)
       end
 
       context 'when organization does not have right email settings' do
         let(:email_settings) { [] }
 
-        it 'does not enqueue an ActionMailer::MailDeliveryJob' do
+        it 'does not enqueue an SendEmailJob' do
           expect do
             invoice_service.call
-          end.not_to have_enqueued_job(ActionMailer::MailDeliveryJob)
+          end.not_to have_enqueued_job(SendEmailJob)
         end
       end
     end
@@ -193,6 +196,17 @@ RSpec.describe Invoices::CreatePayInAdvanceChargeService, type: :service do
 
         expect(result.invoice.issuing_date.to_s).to eq('2022-11-24')
         expect(result.invoice.payment_due_date.to_s).to eq('2022-11-24')
+      end
+    end
+
+    context 'with grace period' do
+      let(:customer) { create(:customer, organization:, invoice_grace_period: 3) }
+      let(:timestamp) { DateTime.parse('2022-11-25 08:00:00') }
+
+      it 'assigns the correct issuing date' do
+        result = invoice_service.call
+
+        expect(result.invoice.issuing_date.to_s).to eq('2022-11-25')
       end
     end
 
@@ -222,6 +236,8 @@ RSpec.describe Invoices::CreatePayInAdvanceChargeService, type: :service do
           group: nil,
           pay_in_advance_event_id: event.id,
           payment_status: 'pending',
+          unit_amount_cents: 1,
+          precise_unit_amount: 0.01111111111,
         )
 
         expect(result.invoice.currency).to eq(customer.currency)

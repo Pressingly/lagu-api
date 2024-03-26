@@ -3,16 +3,25 @@
 module Events
   module Stores
     class BaseStore
-      def initialize(code:, subscription:, boundaries:, group: nil, event: nil)
+      def initialize(code:, subscription:, boundaries:, filters: {})
         @code = code
         @subscription = subscription
         @boundaries = boundaries
-        @group = group
-        @event = event
+
+        @group = filters[:group]
+        @grouped_by = filters[:grouped_by]
+        @grouped_by_values = filters[:grouped_by_values]
+
+        @matching_filters = filters[:matching_filters] || {}
+        @ignored_filters = filters[:ignored_filters] || {}
 
         @aggregation_property = nil
         @numeric_property = false
         @use_from_boundary = true
+      end
+
+      def grouped_by_values?
+        grouped_by_values.present?
       end
 
       def events(force_from: false)
@@ -33,7 +42,15 @@ module Events
 
       delegate :count, to: :events
 
+      def grouped_count
+        raise NotImplementedError
+      end
+
       def max
+        raise NotImplementedError
+      end
+
+      def grouped_max
         raise NotImplementedError
       end
 
@@ -41,7 +58,15 @@ module Events
         raise NotImplementedError
       end
 
+      def grouped_last
+        raise NotImplementedError
+      end
+
       def sum
+        raise NotImplementedError
+      end
+
+      def grouped_sum
         raise NotImplementedError
       end
 
@@ -49,10 +74,22 @@ module Events
         raise NotImplementedError
       end
 
+      def grouped_prorated_sum(period_duration:, persisted_duration: nil)
+        raise NotImplementedError
+      end
+
       # NOTE: returns the breakdown of the sum grouped by date
       #       The result format will be an array of hash with the format:
       #       [{ date: Date.parse('2023-11-27'), value: 12.9 }, ...]
       def sum_date_breakdown
+        raise NotImplementedError
+      end
+
+      def weighted_sum(initial_value: 0)
+        raise NotImplementedError
+      end
+
+      def grouped_weighted_sum(initial_values: [])
         raise NotImplementedError
       end
 
@@ -68,11 +105,11 @@ module Events
         boundaries[:charges_duration]
       end
 
-      attr_accessor :numeric_property, :aggregation_property, :use_from_boundary
+      attr_accessor :numeric_property, :aggregation_property, :use_from_boundary, :grouped_by
 
       protected
 
-      attr_accessor :code, :subscription, :group, :event, :boundaries
+      attr_accessor :code, :subscription, :group, :boundaries, :grouped_by_values, :matching_filters, :ignored_filters
 
       delegate :customer, to: :subscription
 

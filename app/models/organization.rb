@@ -25,17 +25,18 @@ class Organization < ApplicationRecord
   has_many :applied_coupons, through: :coupons
   has_many :add_ons
   has_many :invites
-  has_many :payment_providers
+  has_many :payment_providers, class_name: 'PaymentProviders::BaseProvider'
   has_many :taxes
   has_many :wallets, through: :customers
   has_many :wallet_transactions, through: :wallets
   has_many :webhook_endpoints
   has_many :webhooks, through: :webhook_endpoints
 
-  has_one :stripe_payment_provider, class_name: 'PaymentProviders::StripeProvider'
-  has_one :gocardless_payment_provider, class_name: 'PaymentProviders::GocardlessProvider'
-  has_one :adyen_payment_provider, class_name: 'PaymentProviders::AdyenProvider'
-  has_one :pinet_payment_provider, class_name: 'PaymentProviders::PinetProvider'
+  has_many :stripe_payment_providers, class_name: 'PaymentProviders::StripeProvider'
+  has_many :gocardless_payment_providers, class_name: 'PaymentProviders::GocardlessProvider'
+  has_many :adyen_payment_providers, class_name: 'PaymentProviders::AdyenProvider'
+  # TODO: Check merging conflict. Payment providers are refactored from has_one to has_many
+  has_many :pinet_payment_providers, class_name: 'PaymentProviders::PinetProvider'
 
   has_one_attached :logo
 
@@ -83,6 +84,10 @@ class Organization < ApplicationRecord
     end
   end
 
+  def eu_vat_eligible?
+    country && LagoEuVat::Rate.new.countries_code.include?(country)
+  end
+
   def payment_provider(provider)
     case provider
     when 'stripe'
@@ -91,6 +96,8 @@ class Organization < ApplicationRecord
       gocardless_payment_provider
     when 'adyen'
       adyen_payment_provider
+    when 'pinet'
+      pinet_payment_provider
     end
   end
 

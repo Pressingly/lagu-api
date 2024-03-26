@@ -9,10 +9,8 @@ module PaymentProviderCustomers
     end
 
     def create_or_update(customer_class:, payment_provider_id:, params:, async: true)
-      provider_customer = customer_class.find_or_initialize_by(
-        customer_id: customer.id,
-        payment_provider_id:,
-      )
+      provider_customer = customer_class.find_by(customer_id: customer.id)
+      provider_customer ||= customer_class.new(customer_id: customer.id, payment_provider_id:)
 
       if (params || {}).key?(:provider_customer_id)
         provider_customer.provider_customer_id = params[:provider_customer_id].presence
@@ -22,21 +20,24 @@ module PaymentProviderCustomers
         provider_customer.sync_with_provider = params[:sync_with_provider].presence
       end
 
-      if provider_customer.is_a?(PaymentProviderCustomers::StripeCustomer)
-        if provider_customer.persisted? && (provider_payment_methods = (params || {})[:provider_payment_methods]).present?
-          provider_customer.provider_payment_methods = provider_payment_methods
-        elsif (provider_payment_methods = (params || {})[:provider_payment_methods]).present?
-          provider_customer.provider_payment_methods = provider_payment_methods
-        else
-          provider_customer.provider_payment_methods = %w[card]
-        end
-      end
+      # TODO: Check merging conflict (line 24-38: current changes, line 40: incoming changes)
+      # if provider_customer.is_a?(PaymentProviderCustomers::StripeCustomer)
+      #   if provider_customer.persisted? &&
+      #      (provider_payment_methods = (params || {})[:provider_payment_methods]).present?
+      #     provider_customer.provider_payment_methods = provider_payment_methods
+      #   elsif (provider_payment_methods = (params || {})[:provider_payment_methods]).present?
+      #     provider_customer.provider_payment_methods = provider_payment_methods
+      #   else
+      #     provider_customer.provider_payment_methods = %w[card]
+      #   end
+      # end
 
       if provider_customer.is_a?(PaymentProviderCustomers::PinetCustomer) &&
          (payment_token = (params || {})[:payment_token]).present?
         provider_customer.payment_token = payment_token
       end
 
+      provider_customer = handle_provider_payment_methods(provider_customer:, params:)
       provider_customer.save!
 
       result.provider_customer = provider_customer
@@ -57,6 +58,20 @@ module PaymentProviderCustomers
     attr_accessor :customer
 
     delegate :organization, to: :customer
+
+    def handle_provider_payment_methods(provider_customer:, params:)
+      return provider_customer unless provider_customer.is_a?(PaymentProviderCustomers::StripeCustomer)
+
+      provider_payment_methods = (params || {})[:provider_payment_methods]
+
+      if provider_customer.persisted?
+        provider_customer.provider_payment_methods = provider_payment_methods if provider_payment_methods.present?
+      else
+        provider_customer.provider_payment_methods = provider_payment_methods.presence || %w[card]
+      end
+
+      provider_customer
+    end
 
     def create_customer_on_provider_service(async)
       if result.provider_customer.type == 'PaymentProviderCustomers::StripeCustomer'

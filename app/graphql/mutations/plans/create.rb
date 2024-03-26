@@ -23,6 +23,7 @@ module Mutations
 
       argument :charge_groups, [Types::ChargeGroups::Input], required: false
       argument :charges, [Types::Charges::Input]
+      argument :minimum_commitment, Types::Commitments::Input, required: false
 
       type Types::Plans::Object
 

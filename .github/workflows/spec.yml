@@ -37,11 +37,11 @@ jobs:
       LAGO_CLICKHOUSE_PASSWORD: ""
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install Ruby and gems
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.2.2"
+          ruby-version: "3.2.3"
           bundler-cache: true
       - name: Start Clickhouse database
         run: |
@@ -52,6 +52,8 @@ jobs:
       - name: Set up Postgres database schema
         run: bin/rails db:schema:load:primary
       - name: Set up Clickhouse database schema
-        run: bin/rails db:schema:load:clickhouse
+        run: bin/rails db:migrate:clickhouse
+      - name: Set up Clickhouse database schema
+        run: bin/rails db:schema:dump:clickhouse
       - name: Run tests
         run: bundle exec rspec

@@ -12,17 +12,13 @@ module Subscriptions
           if subscription.next_subscription&.pending?
             # NOTE: In case of downgrade, subscription remain active until the end of the period,
             #       a next subscription is pending, the current one must be terminated
-            Subscriptions::TerminateJob
-              .set(wait: rand(50).minutes)
-              .perform_later(subscription, billing_timestamp)
+            Subscriptions::TerminateJob.perform_later(subscription, billing_timestamp)
           else
             billing_subscriptions << subscription
           end
         end
 
-        BillSubscriptionJob
-          .set(wait: rand(50).minutes)
-          .perform_later(billing_subscriptions, billing_timestamp, recurring: true)
+        BillSubscriptionJob.perform_later(billing_subscriptions, billing_timestamp, recurring: true)
       end
     end
 
@@ -203,7 +199,6 @@ module Subscriptions
     end
 
     # NOTE: Billed quarterly on anniversary date
-    # rubocop:disable Layout/LineLength
     def quarterly_anniversary
       billing_day = <<-SQL
         DATE_PART('day', (subscriptions.subscription_at#{at_time_zone})) = ANY (
@@ -241,7 +236,6 @@ module Subscriptions
         conditions: [billing_month, billing_day],
       )
     end
-    # rubocop:enable Layout/LineLength
 
     def yearly_anniversary
       billing_month = <<-SQL

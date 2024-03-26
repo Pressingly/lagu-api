@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
-Rake::Task['db:migrate'].enhance do
-  Rake::Task['db:clickhouse:filter'].invoke
-end
+unless defined?(ENHANCED_TASKS)
+  ENHANCED_TASKS = %w[db:migrate db:migrate:primary db:rollback db:rollback:primary db:schema:dump:clickhouse].freeze
 
-if Rake::Task.task_defined?('db:schema:dump:clickhouse')
-  Rake::Task['db:schema:dump:clickhouse'].enhance do
-    Rake::Task['db:clickhouse:filter'].invoke
+  ENHANCED_TASKS.each do |task|
+    next unless Rake::Task.task_defined?(task)
+
+    Rake::Task[task].enhance do
+      Rake::Task['db:clickhouse:filter'].invoke
+    end
   end
 end
 
@@ -17,7 +19,11 @@ namespace :db do
 
     migration_file = 'db/clickhouse_schema.rb'
     text = File.read(migration_file)
-    new_contents = text.gsub(ENV.fetch('LAGO_KAFKA_BOOTSTRAP_SERVERS', ''), '*****')
-    File.open(migration_file, 'w') { |file| file.puts new_contents }
+
+    text = text.gsub(ENV.fetch('LAGO_KAFKA_BOOTSTRAP_SERVERS', ''), '*****')
+    text = text.gsub(ENV.fetch('LAGO_KAFKA_RAW_EVENTS_TOPIC', ''), '*****')
+    text = text.gsub(ENV.fetch('LAGO_KAFKA_CLICKHOUSE_CONSUMER_GROUP', ''), '*****')
+
+    File.open(migration_file, 'w') { |file| file.puts text }
   end
 end

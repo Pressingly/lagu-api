@@ -5,6 +5,7 @@ module Types
     class Properties < Types::BaseObject
       # NOTE: Standard and Package charge model
       field :amount, String, null: true
+      field :grouped_by, [String], null: true
 
       # NOTE: Graduated charge model
       field :graduated_ranges, [Types::Charges::GraduatedRange], null: true

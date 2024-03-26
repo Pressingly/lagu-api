@@ -17,6 +17,41 @@ RSpec.describe Resolvers::PlanResolver, type: :graphql do
           charges {
             id
             taxes { id rate }
+            properties {
+              amount
+              groupedBy
+              freeUnits
+              packageSize
+              fixedAmount
+              freeUnitsPerEvents
+              freeUnitsPerTotalAggregation
+              perTransactionMaxAmount
+              perTransactionMinAmount
+              rate
+            }
+            groupProperties {
+              groupId
+              invoiceDisplayName
+              values {
+                amount
+                groupedBy
+                freeUnits
+                packageSize
+                fixedAmount
+                freeUnitsPerEvents
+                freeUnitsPerTotalAggregation
+                perTransactionMaxAmount
+                perTransactionMinAmount
+                rate
+              }
+              deletedAt
+            }
+          }
+          minimumCommitment {
+            id
+            amountCents
+            invoiceDisplayName
+            taxes { id rate }
           }
         }
       }
@@ -27,10 +62,18 @@ RSpec.describe Resolvers::PlanResolver, type: :graphql do
   let(:organization) { membership.organization }
   let(:customer) { create(:customer, organization:) }
   let(:plan) { create(:plan, organization:) }
+  let(:group) { create(:group, billable_metric:) }
+  let(:group_property) { create(:group_property, group:, charge:) }
+
+  let(:billable_metric) { create(:billable_metric, organization:) }
+  let(:charge) { create(:standard_charge, billable_metric:, plan:) }
+  let(:minimum_commitment) { create(:commitment, :minimum_commitment, plan:) }
 
   before do
     customer
+    group_property
     create_list(:subscription, 2, customer:, plan:)
+    minimum_commitment
   end
 
   it 'returns a single plan' do
@@ -47,6 +90,12 @@ RSpec.describe Resolvers::PlanResolver, type: :graphql do
       expect(plan_response['id']).to eq(plan.id)
       expect(plan_response['subscriptionsCount']).to eq(2)
       expect(plan_response['customersCount']).to eq(1)
+      expect(plan_response['minimumCommitment']).to include(
+        'id' => minimum_commitment.id,
+        'amountCents' => minimum_commitment.amount_cents.to_s,
+        'invoiceDisplayName' => minimum_commitment.invoice_display_name,
+        'taxes' => [],
+      )
     end
   end
 

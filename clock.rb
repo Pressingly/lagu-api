@@ -26,6 +26,10 @@ module Clockwork
     Clock::RefreshDraftInvoicesJob.perform_later
   end
 
+  every(5.minutes, 'schedule:refresh_wallets_ongoing_balance') do
+    Clock::RefreshWalletsOngoingBalanceJob.perform_later
+  end
+
   every(1.hour, 'schedule:terminate_ended_subscriptions', at: '*:05') do
     Clock::TerminateEndedSubscriptionsJob.perform_later
   end
@@ -60,5 +64,7 @@ module Clockwork
 
   every(1.hour, 'schedule:post_validate_events', at: '*:05') do
     Clock::EventsValidationJob.perform_later
+  rescue StandardError => e
+    Sentry.capture_exception(e)
   end
 end

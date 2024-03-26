@@ -65,4 +65,6 @@ Rails.application.configure do
   }
 
   Dotenv.load
+
+  # Timecop.scale(60*10)
 end

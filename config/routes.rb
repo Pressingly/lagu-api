@@ -63,6 +63,7 @@ Rails.application.routes.draw do
         post :download, on: :member
         post :void, on: :member
         post :retry_payment, on: :member
+        post :payment_url, on: :member
         put :refresh, on: :member
         put :finalize, on: :member
       end
@@ -74,6 +75,7 @@ Rails.application.routes.draw do
       delete '/wallets/:id', to: 'wallets#terminate'
       post '/events/batch', to: 'events#batch'
 
+      get '/organizations', to: 'organizations#show'
       put '/organizations', to: 'organizations#update'
       get '/organizations/grpc_token', to: 'organizations#grpc_token'
 
@@ -96,6 +98,12 @@ Rails.application.routes.draw do
     resources :organizations, only: %i[update]
     resources :invoices do
       post :regenerate, on: :member
+    end
+  end
+
+  if Rails.env.development?
+    namespace :dev_tools do
+      get '/invoices/:id', to: 'invoices#show'
     end
   end
 

@@ -3,6 +3,8 @@
 module Invoices
   module Payments
     class StripeService < BaseService
+      include Customers::PaymentProviderFinder
+
       PENDING_STATUSES = %w[processing requires_capture requires_action requires_confirmation requires_payment_method]
         .freeze
       SUCCESS_STATUSES = %w[succeeded].freeze
@@ -31,7 +33,7 @@ module Invoices
 
         payment = Payment.new(
           invoice:,
-          payment_provider_id: organization.stripe_payment_provider.id,
+          payment_provider_id: stripe_payment_provider.id,
           payment_provider_customer_id: customer.stripe_customer.id,
           amount_cents: stripe_result.amount,
           amount_currency: stripe_result.currency&.upcase,
@@ -50,7 +52,11 @@ module Invoices
       end
 
       def update_payment_status(organization_id:, provider_payment_id:, status:, metadata: {})
-        payment = Payment.find_by(provider_payment_id:)
+        payment = if metadata[:payment_type] == 'one-time'
+          create_payment(provider_payment_id:, metadata:)
+        else
+          Payment.find_by(provider_payment_id:)
+        end
         return handle_missing_payment(organization_id, metadata) unless payment
 
         result.payment = payment
@@ -69,21 +75,60 @@ module Invoices
         result.fail_with_error!(e)
       end
 
+      def generate_payment_url
+        return result unless should_process_payment?
+
+        res = Stripe::Checkout::Session.create(
+          payment_url_payload,
+          {
+            api_key: stripe_api_key,
+          },
+        )
+
+        result.payment_url = res['url']
+
+        result
+      rescue Stripe::CardError, Stripe::InvalidRequestError, Stripe::AuthenticationError, Stripe::PermissionError => e
+        deliver_error_webhook(e)
+
+        result.single_validation_failure!(error_code: 'payment_provider_error')
+      end
+
       private
 
       attr_accessor :invoice
 
       delegate :organization, :customer, to: :invoice
 
+      def create_payment(provider_payment_id:, metadata:)
+        @invoice = Invoice.find(metadata[:lago_invoice_id])
+
+        increment_payment_attempts
+
+        Payment.new(
+          invoice:,
+          payment_provider_id: stripe_payment_provider.id,
+          payment_provider_customer_id: customer.stripe_customer.id,
+          amount_cents: invoice.total_amount_cents,
+          amount_currency: invoice.currency&.upcase,
+          provider_payment_id:,
+        )
+      end
+
+      def success_redirect_url
+        stripe_payment_provider.success_redirect_url.presence ||
+          ::PaymentProviders::StripeProvider::SUCCESS_REDIRECT_URL
+      end
+
       def should_process_payment?
         return false if invoice.succeeded? || invoice.voided?
-        return false if organization.stripe_payment_provider.blank?
+        return false if stripe_payment_provider.blank?
 
         customer&.stripe_customer&.provider_customer_id
       end
 
       def stripe_api_key
-        organization.stripe_payment_provider.secret_key
+        stripe_payment_provider.secret_key
       end
 
       def stripe_payment_method
@@ -169,6 +214,36 @@ module Invoices
         }
       end
 
+      def payment_url_payload
+        {
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: invoice.currency.downcase,
+                unit_amount: invoice.total_amount_cents,
+                product_data: {
+                  name: invoice.number,
+                },
+              },
+            },
+          ],
+          mode: 'payment',
+          success_url: success_redirect_url,
+          customer: customer.stripe_customer.provider_customer_id,
+          payment_method_types: customer.stripe_customer.provider_payment_methods,
+          payment_intent_data: {
+            metadata: {
+              lago_customer_id: customer.id,
+              lago_invoice_id: invoice.id,
+              invoice_issuing_date: invoice.issuing_date.iso8601,
+              invoice_type: invoice.invoice_type,
+              payment_type: 'one-time',
+            },
+          },
+        }
+      end
+
       def invoice_payment_status(payment_status)
         return :pending if PENDING_STATUSES.include?(payment_status)
         return :succeeded if SUCCESS_STATUSES.include?(payment_status)
@@ -221,6 +296,10 @@ module Invoices
         return result if invoice.failed?
 
         result.not_found_failure!(resource: 'stripe_payment')
+      end
+
+      def stripe_payment_provider
+        @stripe_payment_provider ||= payment_provider(customer)
       end
     end
   end
