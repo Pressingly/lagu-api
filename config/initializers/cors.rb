@@ -13,7 +13,7 @@ Rails.application.config.middleware.insert_before(0, Rack::Cors) do
         [uri.host, uri.port].join(':')
       end
 
-      origins frontend_origin
+      origins frontend_origin, 'localhost:8080'
     elsif Rails.env.development?
       origins 'app.lago.dev', 'api', 'lago.ngrok.dev'
     end
